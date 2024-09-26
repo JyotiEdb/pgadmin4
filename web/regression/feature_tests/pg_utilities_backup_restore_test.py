@@ -60,7 +60,7 @@ class PGUtilitiesBackupFeatureTest(BaseFeatureTest):
         self._update_preferences()
         db_id = test_utils.create_database(self.server, self.database_name)
         if not db_id:
-            self.assertTrue(False, "Database {} is not "
+            self.assertEqual(0, 1, "Database {} is not "
                                    "created".format(self.database_name))
         self.page.add_server(self.server)
 
@@ -262,7 +262,7 @@ class PGUtilitiesBackupFeatureTest(BaseFeatureTest):
             (By.XPATH, NavMenuLocators.show_system_objects_pref_label_xpath))
         )
 
-        maximize_button = self.page.find_by_xpath(
+        maximize_button = self.page.find_by_css_selector(
             NavMenuLocators.maximize_pref_dialogue_css)
         maximize_button.click()
 
@@ -281,8 +281,9 @@ class PGUtilitiesBackupFeatureTest(BaseFeatureTest):
         default_binary_path = self.server['default_binary_paths']
         if default_binary_path is not None:
             def get_server_version_string():
-                server_version = {160000: '16', 150000: '15', 140000: '14',
-                                  130000: '13', 120000: '12', 110000: '11'}
+                server_version = {170000: '17', 160000: '16', 150000: '15',
+                                  140000: '14', 130000: '13', 120000: '12',
+                                  110000: '11'}
                 for k, v in server_version.items():
                     if k <= self.server_information['server_version']:
                         return v
@@ -291,43 +292,25 @@ class PGUtilitiesBackupFeatureTest(BaseFeatureTest):
             server_types = default_binary_path.keys()
             path_already_set = True
             for serv in server_types:
-                if serv == 'pg' and server_version is not None and \
-                        default_binary_path['pg'] != '':
-                    path_input = \
-                        self.page.find_by_xpath(
-                            "//div[span[text()='PostgreSQL {}']]"
-                            "/following-sibling::div//div/input".format(
-                                server_version))
-                    existing_path = path_input.get_property("value")
-                    if existing_path != default_binary_path['pg']:
-                        path_already_set = False
-                        self.page.clear_edit_box(path_input)
-                        path_input.click()
-                        path_input.send_keys(default_binary_path['pg'])
-                elif serv == 'ppas' and server_version is not None and \
-                        default_binary_path['ppas'] != '':
-                    path_input = \
-                        self.page.find_by_xpath(
-                            "//div[span[text()='EDB Advanced Server {}']]"
-                            "/following-sibling::div//div/input".format(
-                                server_version))
-                    existing_path = path_input.get_property("value")
-                    if existing_path != default_binary_path['ppas']:
-                        path_already_set = False
-                        path_input = self.page.find_by_xpath(
-                            "//div[span[text()='EDB Advanced Server {}']]"
-                            "/following-sibling::div//div/input".format(
-                                server_version))
-                        self.page.clear_edit_box(path_input)
-                        path_input.click()
-                        path_input.send_keys(default_binary_path['ppas'])
+                if server_version is not None:
+                    server_type = 'PostgreSQL' if serv == 'pg' \
+                        else 'EDB Advanced Server'
+                    path_input_css = "div[class='pgrd-row-cell ']" \
+                                     "[title='{0} {1}']" \
+                                     "+div[class='pgrd-row-cell '] input"\
+                        .format(server_type, server_version)
+                    path_input = self.page.find_by_css_selector(path_input_css)
+                    if default_binary_path[serv] != '':
+                        existing_path = path_input.get_property("value")
+                        if existing_path != default_binary_path[serv]:
+                            path_already_set = False
+                            self.page.fill_input(
+                                path_input, default_binary_path[serv]
+                            )
+                    else:
+                        print('Binary path Key is Incorrect')
                 else:
-                    print('Binary path Key is Incorrect or '
-                          'server version is None.')
-
-        maximize_button = self.page.find_by_xpath(
-            NavMenuLocators.maximize_pref_dialogue_css)
-        maximize_button.click()
+                    print('Server version is None.')
 
         # save and close the preference dialog.
         if path_already_set:

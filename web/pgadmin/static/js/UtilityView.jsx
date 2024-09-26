@@ -43,8 +43,10 @@ export default function UtilityView() {
                     gettext('Error'),
                     gettext(data.errormsg)
                   );
-                } else {
+                } else if(data.data) {
                   pgAdmin.Browser.BgProcessManager.startProcess(data.data.job_id, data.data.desc);
+                } else if(data.info) {
+                  pgAdmin.Browser.notifier.success(data.info);
                 }
                 pgAdmin.Browser.docker.close(panelId);
               })}
@@ -67,8 +69,7 @@ function UtilityViewContent({panelId, schema, treeNodeInfo, actionType, formType
   onSave, extraData, saveBtnName, urlBase, sqlHelpUrl, helpUrl, isTabView=true}) {
 
   const pgAdmin = usePgAdmin();
-  const serverInfo = treeNodeInfo && ('server' in treeNodeInfo) &&
-  pgAdmin.Browser.serverInfo && pgAdmin.Browser.serverInfo[treeNodeInfo.server._id];
+  const serverInfo = treeNodeInfo && ('server' in treeNodeInfo) && pgAdmin.Browser.serverInfo?.[treeNodeInfo.server._id];
   const api = getApiInstance();
   const url = ()=>{
     return urlBase;
@@ -78,7 +79,7 @@ function UtilityViewContent({panelId, schema, treeNodeInfo, actionType, formType
   /* button icons */
   const saveBtnIcon = extraData.save_btn_icon;
 
-  /* Node type & Noen obj*/
+  /* Node type & Node obj*/
   let nodeObj = extraData.nodeType? pgAdmin.Browser.Nodes[extraData.nodeType]: undefined;
   let itemNodeData = extraData?.itemNodeData ? itemNodeData: undefined;
 
@@ -89,14 +90,14 @@ function UtilityViewContent({panelId, schema, treeNodeInfo, actionType, formType
     return api({
       url: url(),
       method: isNew ? 'POST' : 'PUT',
-      data: Object.assign({}, data, extraData),
+      data: {...data, ...extraData},
     }).then((res)=>{
       /* Don't warn the user before closing dialog */
       resolve(res.data);
       onSave?.(res.data);
       onClose();
     }).catch((err)=>{
-      reject(err);
+      reject(err instanceof Error ? err : Error(gettext('Something went wrong')));
     });
   });
 
@@ -112,7 +113,7 @@ function UtilityViewContent({panelId, schema, treeNodeInfo, actionType, formType
         resolve(res.data.data);
       }).catch((err)=>{
         onError(err);
-        reject(err);
+        reject(err instanceof Error ? err : Error(gettext('Something went wrong')));
       });
     });
   };
@@ -162,7 +163,7 @@ function UtilityViewContent({panelId, schema, treeNodeInfo, actionType, formType
           } else if(err.message){
             console.error('error msg', err.message);
           }
-          reject(err);
+          reject(err instanceof Error ? err : Error(gettext('Something went wrong')));
         });
     }
 

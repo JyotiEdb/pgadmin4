@@ -22,7 +22,7 @@ import ForeignKeySchema from '../../../../../browser/server_groups/servers/datab
 import diffArray from 'diff-arrays-of-objects';
 import TableSchema from '../../../../../browser/server_groups/servers/databases/schemas/tables/static/js/table.ui';
 import ColumnSchema from '../../../../../browser/server_groups/servers/databases/schemas/tables/columns/static/js/column.ui';
-import { Polygon } from '@projectstorm/geometry';
+import { boundingBoxFromPolygons } from '@projectstorm/geometry';
 
 export default class ERDCore {
   constructor() {
@@ -35,8 +35,12 @@ export default class ERDCore {
     this.computeTableCounter();
   }
 
+  createEngine(options) {
+    return createEngine(options);
+  }
+
   initializeEngine() {
-    this.engine = createEngine({
+    this.engine = this.createEngine({
       registerDefaultDeleteItemsAction: false,
       registerDefaultZoomCanvasAction: false,
     });
@@ -177,7 +181,7 @@ export default class ERDCore {
   getModel() {return this.getEngine().getModel();}
 
   getBoundingLinksRect() {
-    return Polygon.boundingBoxFromPolygons(
+    return boundingBoxFromPolygons(
       this.getEngine().getModel().getLinks().map((l)=>l.getBoundingBox()));
   }
 
@@ -368,7 +372,7 @@ export default class ERDCore {
       fkTableNode.getData().foreign_key?.forEach((theFkRow)=>{
         for(let fkColumn of theFkRow.columns) {
           if(fkColumn.references == tableNode.getID()) {
-            let attnum = _.find(oldTableData.columns, (c)=>c.name==fkColumn.referenced).attnum;
+            let attnum = _.find(oldTableData.columns, (c)=>c.name==fkColumn.referenced)?.attnum;
             fkColumn.referenced = _.find(tableData.columns, (colm)=>colm.attnum==attnum).name;
             fkColumn.references_table_name = tableData.name;
           }
@@ -413,8 +417,8 @@ export default class ERDCore {
       let tableNodesDict = this.getModel().getNodesDict();
       let sourceNode = tableNodesDict[theFk.references];
 
-      let localAttnum = _.find(tableNode.getColumns(), (col)=>col.name==theFk.local_column).attnum;
-      let refAttnum = _.find(sourceNode.getColumns(), (col)=>col.name==theFk.referenced).attnum;
+      let localAttnum = _.find(tableNode.getColumns(), (col)=>col.name==theFk.local_column)?.attnum;
+      let refAttnum = _.find(sourceNode.getColumns(), (col)=>col.name==theFk.referenced)?.attnum;
       const fkLink = Object.values(tableNode.getLinks()).find((link)=>{
         const ldata = link.getData();
         return ldata.local_column_attnum == localAttnum

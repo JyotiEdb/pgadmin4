@@ -10,50 +10,17 @@ import React, { useState, useEffect, useRef, useReducer, useMemo } from 'react';
 import PgTable from 'sources/components/PgTable';
 import gettext from 'sources/gettext';
 import PropTypes from 'prop-types';
-import { makeStyles } from '@material-ui/core/styles';
 import {getGCD, getEpoch} from 'sources/utils';
-import ChartContainer from '../ChartContainer';
-import { Box, Grid } from '@material-ui/core';
+import ChartContainer from '../components/ChartContainer';
+import { Box, Grid } from '@mui/material';
 import { DATA_POINT_SIZE } from 'sources/chartjs';
 import StreamingChart from '../../../../static/js/components/PgChart/StreamingChart';
 import {useInterval, usePrevious} from 'sources/custom_hooks';
 import axios from 'axios';
 import { getStatsUrl, transformData, statsReducer, X_AXIS_LENGTH } from './utility.js';
 import { toPrettySize } from '../../../../static/js/utils';
+import SectionContainer from '../components/SectionContainer.jsx';
 
-const useStyles = makeStyles((theme) => ({
-  autoResizer: {
-    height: '100% !important',
-    width: '100% !important',
-    background: theme.palette.grey[400],
-    padding: '8px',
-    overflowX: 'auto !important',
-    overflowY: 'hidden !important',
-    minHeight: '100%',
-    minWidth: '100%',
-  },
-  container: {
-    height: 'auto',
-    padding: '0px !important',
-    marginBottom: '4px',
-  },
-  fixedContainer: {
-    flexGrow: 1,
-    padding: '0px !important',
-    marginBottom: '4px',
-  },
-  tableContainer: {
-    padding: '6px',
-    width: '100%',
-  },
-  containerHeader: {
-    fontSize: '15px',
-    fontWeight: 'bold',
-    display: 'flex',
-    alignItems: 'center',
-    height: '100%',
-  }
-}));
 
 const chartsDefault = {
   'm_stats': {'Total': [], 'Used': [], 'Free': []},
@@ -69,40 +36,38 @@ export default function Memory({preferences, sid, did, pageVisible, enablePoll=t
   const [swapMemoryUsageInfo, swapMemoryUsageInfoReduce] = useReducer(statsReducer, chartsDefault['sm_stats']);
   const [processMemoryUsageStats, setProcessMemoryUsageStats] = useState([]);
 
-  const [, setCounterData] = useState({});
-
   const [pollDelay, setPollDelay] = useState(5000);
   const [errorMsg, setErrorMsg] = useState(null);
   const [chartDrawnOnce, setChartDrawnOnce] = useState(false);
 
   const tableHeader = [
     {
-      Header: gettext('PID'),
-      accessor: 'pid',
-      sortable: true,
-      resizable: true,
-      disableGlobalFilter: false,
+      header: gettext('PID'),
+      accessorKey: 'pid',
+      enableSorting: true,
+      enableResizing: true,
+      enableFilters: true,
     },
     {
-      Header: gettext('Name'),
-      accessor: 'name',
-      sortable: true,
-      resizable: true,
-      disableGlobalFilter: false,
+      header: gettext('Name'),
+      accessorKey: 'name',
+      enableSorting: true,
+      enableResizing: true,
+      enableFilters: true,
     },
     {
-      Header: gettext('Memory usage'),
-      accessor: 'memory_usage',
-      sortable: true,
-      resizable: true,
-      disableGlobalFilter: false,
+      header: gettext('Memory usage'),
+      accessorKey: 'memory_usage',
+      enableSorting: true,
+      enableResizing: true,
+      enableFilters: true,
     },
     {
-      Header: gettext('Memory bytes'),
-      accessor: 'memory_bytes',
-      sortable: true,
-      resizable: true,
-      disableGlobalFilter: false,
+      header: gettext('Memory bytes'),
+      accessorKey: 'memory_bytes',
+      enableSorting: true,
+      enableResizing: true,
+      enableFilters: true,
     },
   ];
 
@@ -199,20 +164,12 @@ export default function Memory({preferences, sid, did, pageVisible, enablePoll=t
 
           setProcessMemoryUsageStats(pmu_info_list);
         }
-
-        setCounterData((prevCounterData)=>{
-          return {
-            ...prevCounterData,
-            ...data,
-          };
-        });
       })
       .catch((error)=>{
         if(!errorMsg) {
           memoryUsageInfoReduce({reset:chartsDefault['m_stats']});
           swapMemoryUsageInfoReduce({reset:chartsDefault['sm_stats']});
           setProcessMemoryUsageStats([]);
-          setCounterData({});
           if(error.response) {
             if (error.response.status === 428) {
               setErrorMsg(gettext('Please connect to the selected server to view the graph.'));
@@ -257,7 +214,7 @@ Memory.propTypes = {
 };
 
 export function MemoryWrapper(props) {
-  const classes = useStyles();
+
   const options = useMemo(()=>({
     showDataPoints: props.showDataPoints,
     showTooltip: props.showTooltip,
@@ -265,37 +222,36 @@ export function MemoryWrapper(props) {
   }), [props.showTooltip, props.showDataPoints, props.lineBorderWidth]);
 
   return (
-    <>
-      <Grid container spacing={1} className={classes.container}>
-        <Grid item md={6} sm={12}>
-          <ChartContainer id='m-graph' title={gettext('Memory')} datasets={props.memoryUsageInfo.datasets}  errorMsg={props.errorMsg} isTest={props.isTest}>
-            <StreamingChart data={props.memoryUsageInfo} dataPointSize={DATA_POINT_SIZE} xRange={X_AXIS_LENGTH} options={options}
-              valueFormatter={toPrettySize}/>
-          </ChartContainer>
+    (
+      <Box display="flex" flexDirection="column" height="100%">
+        <Grid container spacing={0.5} sx={{marginBottom: '4px'}}>
+          <Grid item md={6}>
+            <ChartContainer id='m-graph' title={gettext('Memory')} datasets={props.memoryUsageInfo.datasets}  errorMsg={props.errorMsg} isTest={props.isTest}>
+              <StreamingChart data={props.memoryUsageInfo} dataPointSize={DATA_POINT_SIZE} xRange={X_AXIS_LENGTH} options={options}
+                valueFormatter={toPrettySize}/>
+            </ChartContainer>
+          </Grid>
+          <Grid item md={6}>
+            <ChartContainer id='sm-graph' title={gettext('Swap memory')} datasets={props.swapMemoryUsageInfo.datasets}  errorMsg={props.errorMsg} isTest={props.isTest}>
+              <StreamingChart data={props.swapMemoryUsageInfo} dataPointSize={DATA_POINT_SIZE} xRange={X_AXIS_LENGTH} options={options}
+                valueFormatter={toPrettySize}/>
+            </ChartContainer>
+          </Grid>
         </Grid>
-        <Grid item md={6} sm={12}>
-          <ChartContainer id='sm-graph' title={gettext('Swap memory')} datasets={props.swapMemoryUsageInfo.datasets}  errorMsg={props.errorMsg} isTest={props.isTest}>
-            <StreamingChart data={props.swapMemoryUsageInfo} dataPointSize={DATA_POINT_SIZE} xRange={X_AXIS_LENGTH} options={options}
-              valueFormatter={toPrettySize}/>
-          </ChartContainer>
-        </Grid>
-      </Grid>
-      <Grid container spacing={1} className={classes.fixedContainer}>
-        <div className={classes.tableContainer}>
-          <PgTable
-            className={classes.autoResizer}
-            CustomHeader={() => {
-              return <div className={classes.containerHeader}>{gettext('Process memory usage')}</div>;
-            }}
-            columns={props.tableHeader}
-            data={props.processMemoryUsageStats}
-            msg={props.errorMsg}
-            type={'panel'}
-            caveTable={false}
-          ></PgTable>
-        </div>
-      </Grid>
-    </>
+        <Box flexGrow={1} minHeight={0}>
+          <SectionContainer title={gettext('Process memory usage')}>
+            <PgTable
+              columns={props.tableHeader}
+              data={props.processMemoryUsageStats}
+              msg={props.errorMsg}
+              type={'panel'}
+              caveTable={false}
+              tableNoBorder={false}
+            ></PgTable>
+          </SectionContainer>
+        </Box>
+      </Box>
+    )
   );
 }
 

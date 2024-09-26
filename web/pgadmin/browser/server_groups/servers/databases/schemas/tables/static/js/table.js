@@ -125,6 +125,9 @@ define('pgadmin.node.table', [
           name: 'generate_erd', node: 'table', module: this,
           applies: ['object', 'context'], callback: 'generate_erd',
           category: 'erd', priority: 5, label: gettext('ERD For Table'),
+          enable: (_, item) => {
+            return !('catalog' in pgAdmin.Browser.tree.getTreeNodeHierarchy(item));
+          }
         }
         ]);
         pgBrowser.Events.on(
@@ -182,7 +185,7 @@ define('pgadmin.node.table', [
 
           pgAdmin.Browser.notifier.confirm(
             gettext('Truncate Table'),
-            gettext('Are you sure you want to truncate table %s?', d.label),
+            gettext('Are you sure you want to truncate table <b>%s</b>?', d.label),
             function () {
               let data = d;
               getApiInstance().put(obj.generate_url(i, 'truncate' , d, true), params)
@@ -399,7 +402,7 @@ define('pgadmin.node.table', [
       handle_cache: function() {
         // Clear Table's cache as column's type is dependent on two node
         // 1) Type node 2) Domain node
-        this.clear_cache.apply(this, null);
+        this.clear_cache(null);
       },
     });
   }

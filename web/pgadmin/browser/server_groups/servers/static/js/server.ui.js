@@ -136,7 +136,7 @@ export default class ServerSchema extends BaseUISchema {
         id: 'shared_username', label: gettext('Shared Username'), type: 'text',
         controlProps: { maxLength: 64},
         mode: ['properties', 'create', 'edit'], deps: ['shared', 'username'],
-        readonly: (s)=>{
+        readonly: (s) => {
           return !(!this.origData.shared && s.shared);
         }, visible: ()=>{
           return current_user.is_admin && pgAdmin.server_mode == 'True';
@@ -224,7 +224,8 @@ export default class ServerSchema extends BaseUISchema {
           return state.connect_now && obj.isNew(state);
         },
         controlProps: {
-          maxLength: null
+          maxLength: null,
+          autoComplete: 'new-password'
         },
         disabled: function(state) {return state.kerberos_conn;},
       },{

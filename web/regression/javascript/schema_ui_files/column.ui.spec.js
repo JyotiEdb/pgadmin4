@@ -12,6 +12,7 @@ import ColumnSchema from '../../../pgadmin/browser/server_groups/servers/databas
 import BaseUISchema from '../../../pgadmin/static/js/SchemaView/base_schema.ui';
 import _ from 'lodash';
 import {addNewDatagridRow, genericBeforeEach, getCreateView, getEditView, getPropertiesView} from '../genericFunctions';
+import { initializeSchemaWithData } from './utils';
 
 class MockSchema extends BaseUISchema {
   get baseFields() {
@@ -45,13 +46,13 @@ function getFieldDepChange(schema, id) {
 }
 
 describe('ColumnSchema', ()=>{
-
-  let schemaObj = new ColumnSchema(
+  const createSchemaObj = () => new ColumnSchema(
     ()=>new MockSchema(),
     {},
     ()=>Promise.resolve([]),
     ()=>Promise.resolve([]),
   );
+  let schemaObj = createSchemaObj();
   let datatypes = [
     {value: 'numeric', length: true, precision: true, min_val: 1, max_val: 140391},
     {value: 'character varying', length: true, precision: false, min_val: 1, max_val: 140391},
@@ -63,15 +64,15 @@ describe('ColumnSchema', ()=>{
   });
 
   it('create', async ()=>{
-    await getCreateView(schemaObj);
+    await getCreateView(createSchemaObj());
   });
 
   it('edit', async ()=>{
-    await getEditView(schemaObj, getInitData);
+    await getEditView(createSchemaObj(), getInitData);
   });
 
   it('properties', async ()=>{
-    await getPropertiesView(schemaObj, getInitData);
+    await getPropertiesView(createSchemaObj(), getInitData);
   });
 
   it('create collection', async ()=>{
@@ -188,7 +189,7 @@ describe('ColumnSchema', ()=>{
     state.attnum = 1;
     state.attidentity = 'a';
     state.colconstype = 'i';
-    schemaObj.origData = {attidentity:'a'};
+    initializeSchemaWithData(schemaObj, {attidentity:'a'});
 
     schemaObj.validate(state, setError);
     expect(setError).toHaveBeenCalledWith('seqincrement', 'Increment value cannot be empty.');
@@ -208,7 +209,7 @@ describe('ColumnSchema', ()=>{
     state.attnum = null;
     state.seqmin = null;
     state.seqmax = null;
-    schemaObj.origData.attidentity = undefined;
+    initializeSchemaWithData(schemaObj, {attidentity: undefined});
     expect(schemaObj.validate(state, setError)).toBe(false);
 
     state.seqmin = 3;

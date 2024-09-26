@@ -8,9 +8,9 @@
 //////////////////////////////////////////////////////////////
 
 
-import React from 'react';
+import React, { act } from 'react';
 
-import { act, render } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import {TestSchema} from './TestSchema.ui';
 
 import SchemaView from '../../../pgadmin/static/js/SchemaView';
@@ -46,7 +46,7 @@ describe('SchemaView', ()=>{
     jest.spyOn(pgAdmin.Browser.notifier, 'alert').mockImplementation(() => {});
   });
 
-  describe('SchemaDialogView', ()=>{
+  describe('SchemaDialogViewEdit', ()=>{
     let ctrl,
       onSave=jest.fn(() => Promise.resolve()),
       onClose=jest.fn(),
@@ -110,8 +110,8 @@ describe('SchemaView', ()=>{
       });
 
       it('onReset after change', async ()=>{
-        onDataChange.mockClear();
         await simulateChanges();
+        onDataChange.mockClear();
         let confirmSpy = jest.spyOn(pgAdmin.Browser.notifier, 'confirm');
         await user.click(ctrl.container.querySelector('[data-test="Reset"]'));
         /* Press OK */

@@ -124,7 +124,7 @@ export function getNodeAjaxOptions(url, nodeObj, treeNodeInfo, itemNodeData, par
           otherParams.useCache && cacheNode.cache(nodeObj.type + '#' + url, treeNodeInfo, cacheLevel, data);
           resolve(transform(data));
         }).catch((err)=>{
-          reject(err);
+          reject(err instanceof Error ? err : Error('Something went wrong'));
         });
       } else {
         // To fetch only options from cache, we do not need time from 'at'
@@ -144,10 +144,10 @@ export function getNodeListById(nodeObj, treeNodeInfo, itemNodeData, params={}, 
     _.each(rows, function(r) {
       if (filter(r)) {
         let l = (_.isFunction(nodeObj['node_label']) ?
-            (nodeObj['node_label']).apply(nodeObj, [r]) :
+            nodeObj['node_label'](r) :
             r.label),
           image = (_.isFunction(nodeObj['node_image']) ?
-            (nodeObj['node_image']).apply(nodeObj, [r]) :
+            nodeObj['node_image'](r) :
             (nodeObj['node_image'] || ('icon-' + nodeObj.type)));
 
         res.push({
@@ -175,10 +175,10 @@ export function getNodeListByName(node, treeNodeInfo, itemNodeData, params={}, f
     _.each(rows, function(r) {
       if (filter(r)) {
         let l = (_.isFunction(nodeObj['node_label']) ?
-            (nodeObj['node_label']).apply(nodeObj, [r]) :
+            nodeObj['node_label'](r) :
             r.label),
           image = (_.isFunction(nodeObj['node_image']) ?
-            (nodeObj['node_image']).apply(nodeObj, [r]) :
+            nodeObj['node_image'](r) :
             (nodeObj['node_image'] || ('icon-' + nodeObj.type)));
 
         res.push({

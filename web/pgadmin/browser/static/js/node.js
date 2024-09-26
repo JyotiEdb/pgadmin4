@@ -139,7 +139,7 @@ define('pgadmin.browser.node', [
           },
           enable: _.isFunction(self.canEdit) ?
             function() {
-              return !!(self.canEdit.apply(self, arguments));
+              return !!(self.canEdit(...arguments));
             } : (!!self.canEdit),
         }]);
       }
@@ -159,7 +159,7 @@ define('pgadmin.browser.node', [
           },
           enable: _.isFunction(self.canDrop) ?
             function() {
-              return !!(self.canDrop.apply(self, arguments));
+              return !!(self.canDrop(...arguments));
             } : (!!self.canDrop),
         }]);
 
@@ -177,7 +177,7 @@ define('pgadmin.browser.node', [
             },
             enable: _.isFunction(self.canDropCascade) ?
               function() {
-                return self.canDropCascade.apply(self, arguments);
+                return self.canDropCascade(...arguments);
               } : (!!self.canDropCascade),
           }]);
         }
@@ -382,11 +382,11 @@ define('pgadmin.browser.node', [
 
           treeNodeInfo = pgBrowser.tree.getTreeNodeHierarchy(nodeItem);
           const panelId = _.uniqueId(BROWSER_PANELS.EDIT_PROPERTIES);
-          const onClose = (force=false)=>pgBrowser.docker.close(panelId, force);
+          const onClose = (force=false)=>{ pgBrowser.docker.close(panelId, force); };
           const onSave = (newNodeData)=>{
             // Clear the cache for this node now.
             setTimeout(()=>{
-              this.clear_cache.apply(this, item);
+              this.clear_cache(item);
             }, 0);
             try {
               pgBrowser.Events.trigger(
@@ -412,11 +412,11 @@ define('pgadmin.browser.node', [
           // browser tree upon the 'Save' button click.
           treeNodeInfo = pgBrowser.tree.getTreeNodeHierarchy(nodeItem);
           const panelId = _.uniqueId(BROWSER_PANELS.EDIT_PROPERTIES);
-          const onClose = (force=false)=>pgBrowser.docker.close(panelId, force);
+          const onClose = (force=false)=>{ pgBrowser.docker.close(panelId, force); };
           const onSave = (newNodeData)=>{
             // Clear the cache for this node now.
             setTimeout(()=>{
-              this.clear_cache.apply(this, item);
+              this.clear_cache(item);
             }, 0);
             try {
               pgBrowser.Events.trigger(
@@ -438,7 +438,7 @@ define('pgadmin.browser.node', [
           });
         } else {
           const panelId = BROWSER_PANELS.EDIT_PROPERTIES+nodeData.id;
-          const onClose = (force=false)=>pgBrowser.docker.close(panelId, force);
+          const onClose = (force=false)=>{ pgBrowser.docker.close(panelId, force); };
           const onSave = (newNodeData)=>{
             let _old = nodeData,
               _new = newNodeData.node,
@@ -446,7 +446,7 @@ define('pgadmin.browser.node', [
 
             // Clear the cache for this node now.
             setTimeout(()=>{
-              this.clear_cache.apply(this, item);
+              this.clear_cache(item);
             }, 0);
 
             pgBrowser.Events.trigger(
@@ -521,16 +521,16 @@ define('pgadmin.browser.node', [
         let msg, title;
 
         if (input.url == 'delete' && d._type === 'database') {
-          msg = gettext('Delete database with the force option will attempt to terminate all existing connections to the "%s" database. Are you sure you want to proceed?', d.label);
+          msg = gettext('Delete database with the force option will attempt to terminate all existing connections to the <b>"%s"</b> database. Are you sure you want to proceed?', d.label);
           title = gettext('Delete FORCE %s?', obj.label);
 
         } else if (input.url == 'delete') {
-          msg = gettext('Are you sure you want to delete %s "%s" and all the objects that depend on it?',
+          msg = gettext('Are you sure you want to delete %s <b>"%s"</b> and all the objects that depend on it?',
             obj.label.toLowerCase(), d.label);
           title = gettext('Delete CASCADE %s?', obj.label);
 
           if (!(_.isFunction(obj.canDropCascade) ?
-            obj.canDropCascade.apply(obj, [d, i]) : obj.canDropCascade)) {
+            obj.canDropCascade(d, i) : obj.canDropCascade)) {
             pgAdmin.Browser.notifier.error(
               gettext('The %s "%s" cannot be dropped.', obj.label, d.label),
               10000
@@ -542,12 +542,12 @@ define('pgadmin.browser.node', [
             msg = gettext('Are you sure you want to remove %s "%s"?', obj.label.toLowerCase(), d.label);
             title = gettext('Remove %s?', obj.label);
           } else {
-            msg = gettext('Are you sure you want to delete %s "%s"?', obj.label.toLowerCase(), d.label);
+            msg = gettext('Are you sure you want to delete %s <b>"%s"</b>?', obj.label.toLowerCase(), d.label);
             title = gettext('Delete %s?', obj.label);
           }
 
           if (!(_.isFunction(obj.canDrop) ?
-            obj.canDrop.apply(obj, [d, i]) : obj.canDrop)) {
+            obj.canDrop(d, i) : obj.canDrop)) {
             pgAdmin.Browser.notifier.error(
               gettext('The %s "%s" cannot be dropped/removed.', obj.label, d.label),
               10000
@@ -664,7 +664,7 @@ define('pgadmin.browser.node', [
           t = pgBrowser.tree,
           i = input.item || t.selected(),
           d = i  ? t.itemData(i) : undefined;
-        pgBrowser.psql.psql_tool(d, i, true);
+        pgAdmin.Tools.Psql.openPsqlTool(d, i);
       },
 
       // Logic to change the server background colour
@@ -745,7 +745,7 @@ define('pgadmin.browser.node', [
       removed: function(item) {
         let self = this;
         setTimeout(function() {
-          self.clear_cache.apply(self, item);
+          self.clear_cache(item);
         }, 0);
       },
       refresh: function(cmd, _item) {
@@ -821,22 +821,18 @@ define('pgadmin.browser.node', [
       /* Fit to standard sizes */
       if(w <= pgBrowser.stdW.sm) {
         w = pgBrowser.stdW.sm;
+      } else if(w <= pgBrowser.stdW.md) {
+        w = pgBrowser.stdW.md;
       } else {
-        if(w <= pgBrowser.stdW.md) {
-          w = pgBrowser.stdW.md;
-        } else {
-          w = pgBrowser.stdW.lg;
-        }
+        w = pgBrowser.stdW.lg;
       }
 
       if(h <= pgBrowser.stdH.sm) {
         h = pgBrowser.stdH.sm;
+      } else if(h <= pgBrowser.stdH.md) {
+        h = pgBrowser.stdH.md;
       } else {
-        if(h <= pgBrowser.stdH.md) {
-          h = pgBrowser.stdH.md;
-        } else {
-          h = pgBrowser.stdH.lg;
-        }
+        h = pgBrowser.stdH.lg;
       }
 
       if(update) {
@@ -939,9 +935,7 @@ define('pgadmin.browser.node', [
     cache: function(url, node_info, level, data) {
       let cached = this.cached = this.cached || {},
         hash = url,
-        min_priority = (
-          node_info?.[level] && node_info?.[level].priority
-        ) || 0;
+        min_priority = node_info?.[level]?.priority || 0;
 
       if (node_info) {
         _.each(_.sortBy(_.values(_.pickBy(

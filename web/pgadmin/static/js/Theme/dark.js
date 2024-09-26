@@ -8,11 +8,11 @@
 //////////////////////////////////////////////////////////////
 
 /* The dark theme */
-import { createTheme } from '@material-ui/core/styles';
-import { darken } from '@material-ui/core/styles/colorManipulator';
+import {  darken, createTheme} from '@mui/material/styles';
 
 export default function(basicSettings) {
   return createTheme(basicSettings, {
+    name: 'dark',
     palette: {
       default: {
         main: '#6b6b6b',
@@ -28,8 +28,10 @@ export default function(basicSettings) {
         main: '#234d6e',
         light: '#323E43',
         contrastText: '#fff',
+        contrastTextLight: '#fff',
         hoverMain: darken('#234d6e', 0.25),
         hoverBorderColor: darken('#234d6e', 0.25),
+        hoverLight: darken('#323E43', 0.25),
         disabledMain: '#234d6e',
       },
       success:  {
@@ -45,7 +47,7 @@ export default function(basicSettings) {
       },
       warning: {
         main: '#eea236',
-        light: '#b18d5a',
+        light: '#74572e',
         contrastText: '#fff',
       },
       info: {
@@ -82,6 +84,7 @@ export default function(basicSettings) {
       }
     },
     otherVars: {
+      colorBrand: '#1b71b5',
       borderColor: '#4a4a4a',
       inputBorderColor: '#6b6b6b',
       inputDisabledBg: 'inherit',
@@ -104,6 +107,11 @@ export default function(basicSettings) {
       textMuted: '#8A8A8A',
       erdCanvasBg: '#303030',
       erdGridColor: '#444952',
+      scroll: {
+        baseColor: '#616161',
+        barBackgroundColor: '#61616133',
+        thumbBackground:'#616161b3'
+      },
       schemaDiff: {
         diffRowColor: '#807a48',
         sourceRowColor: '#402025',
@@ -124,14 +132,23 @@ export default function(basicSettings) {
         comment: '#7fcc5c',
         punctuation: '#d6aaaa',
         operator: '#d6aaaa',
+        name: '#7dc9f1',
         ////
         foldmarker: '#0000FF',
         activeline: '#323e43',
         activelineLight: '#323e43',
-        activelineBorderColor: 'none',
+        currentQueryBorderColor: '#A5CBE2',
         guttersBg: '#303030',
         guttersFg: '#8A8A8A',
       },
+      tree: {
+        textFg: '#d4d4d4',
+        inputBg: '#212121',
+        fgHover: '#d4d4d4',
+        bgHover: '#303030',
+        textHoverFg: '#d4d4d4',
+        bgSelected: '#323E43',
+      }
     }
   });
 }

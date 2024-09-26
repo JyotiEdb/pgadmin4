@@ -20,7 +20,7 @@ from flask_security import current_user
 from pgadmin.browser.server_groups.servers import databases
 from config import PG_DEFAULT_DRIVER
 from pgadmin.browser.server_groups.servers.databases.schemas.utils import \
-    SchemaChildModule, parse_rule_definition, VacuumSettings, get_schema
+    SchemaChildModule, parse_rule_definition, VacuumSettings, check_pgstattuple
 from pgadmin.browser.server_groups.servers.utils import parse_priv_from_db, \
     parse_priv_to_db
 from pgadmin.browser.utils import PGChildNodeView
@@ -28,10 +28,11 @@ from pgadmin.utils.ajax import make_json_response, internal_server_error, \
     make_response as ajax_response, gone
 from pgadmin.utils.driver import get_driver
 from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
-from pgadmin.tools.schema_diff.compare import SchemaDiffObjectCompare
-from pgadmin.utils import html, does_utility_exist, get_server
+from .schema_diff_view_utils import SchemaDiffViewCompare
+from pgadmin.utils import does_utility_exist, get_server
 from pgadmin.model import Server
 from pgadmin.misc.bgprocess.processes import BatchProcess, IProcessDesc
+from pgadmin.utils.constants import SERVER_NOT_FOUND
 
 
 """
@@ -260,6 +261,28 @@ def check_precondition(f):
         self.column_template_path = 'columns/sql/#{0}#'.format(
             self.manager.version)
 
+        # Template for trigger node
+        self.trigger_template_path = 'triggers/sql/{0}/#{1}#'.format(
+            self.manager.server_type, self.manager.version)
+
+        # Template for compound trigger node
+        self.compound_trigger_template_path = (
+            'compound_triggers/sql/{0}/#{1}#'.format(
+                self.manager.server_type, self.manager.version))
+
+        # Template for rules node
+        self.rules_template_path = 'rules/sql'
+
+        # Template for index node
+        self.index_template_path = 'indexes/sql/#{0}#'.format(
+            self.manager.version)
+
+        # Submodule list for schema diff
+        self.view_sub_modules = ['rule', 'trigger', 'index']
+        if (self.manager.server_type == 'ppas' and
+                self.manager.version >= 120000):
+            self.view_sub_modules.append('compound_trigger')
+
         try:
             self.allowed_acls = render_template(
                 "/".join([self.template_path, self._ALLOWED_PRIVS_JSON])
@@ -273,7 +296,7 @@ def check_precondition(f):
     return wrap
 
 
-class ViewNode(PGChildNodeView, VacuumSettings, SchemaDiffObjectCompare):
+class ViewNode(PGChildNodeView, VacuumSettings, SchemaDiffViewCompare):
     """
     This class is responsible for generating routes for view node.
 
@@ -373,8 +396,6 @@ class ViewNode(PGChildNodeView, VacuumSettings, SchemaDiffObjectCompare):
             {'get': 'get_toast_table_vacuum'},
             {'get': 'get_toast_table_vacuum'}]
     })
-
-    keys_to_ignore = ['oid', 'schema', 'xmin', 'oid-2', 'setting']
 
     def __init__(self, *args, **kwargs):
         """
@@ -510,7 +531,7 @@ class ViewNode(PGChildNodeView, VacuumSettings, SchemaDiffObjectCompare):
         # sending result to formtter
         frmtd_reslt = self.formatter(result)
 
-        # merging formated result with main result again
+        # merging formatted result with main result again
         result.update(frmtd_reslt)
 
         return True, result
@@ -1140,7 +1161,8 @@ class ViewNode(PGChildNodeView, VacuumSettings, SchemaDiffObjectCompare):
                 [self.ct_trigger_temp_path,
                  'sql/{0}/#{1}#/create.sql'.format(
                      self.manager.server_type, self.manager.version)]),
-                data=res_rows, display_comments=display_comments)
+                data=res_rows, display_comments=display_comments,
+                conn=self.conn)
             sql_data += '\n'
             sql_data += SQL
 
@@ -1264,7 +1286,8 @@ class ViewNode(PGChildNodeView, VacuumSettings, SchemaDiffObjectCompare):
                 [self.trigger_temp_path,
                  'sql/{0}/#{1}#/create.sql'.format(
                      self.manager.server_type, self.manager.version)]),
-                data=res_rows, display_comments=display_comments)
+                data=res_rows, display_comments=display_comments,
+                conn=self.conn)
             sql_data += '\n'
             sql_data += SQL
 
@@ -1310,7 +1333,8 @@ class ViewNode(PGChildNodeView, VacuumSettings, SchemaDiffObjectCompare):
             SQL = render_template("/".join(
                 [self.index_temp_path,
                  'sql/#{0}#/create.sql'.format(self.manager.version)]),
-                data=data, display_comments=display_comments)
+                data=data, display_comments=display_comments,
+                conn=self.conn)
             sql_data += '\n'
             sql_data += SQL
         return sql_data
@@ -1680,6 +1704,19 @@ class ViewNode(PGChildNodeView, VacuumSettings, SchemaDiffObjectCompare):
 
         return ajax_response(response=sql)
 
+    def _get_sub_module_data_for_compare(self, sid, did, scid, data, vid):
+        # Get sub module data of a specified view for object
+        # comparison
+        for module in self.view_sub_modules:
+            module_view = SchemaDiffRegistry.get_node_view(module)
+            if module_view.blueprint.server_type is None or \
+                self.manager.server_type in \
+                    module_view.blueprint.server_type:
+                sub_data = module_view.fetch_objects_to_compare(
+                    sid=sid, did=did, scid=scid, tid=vid,
+                    oid=None)
+                data[module] = sub_data
+
     @check_precondition
     def fetch_objects_to_compare(self, sid, did, scid, oid=None):
         """
@@ -1707,6 +1744,9 @@ class ViewNode(PGChildNodeView, VacuumSettings, SchemaDiffObjectCompare):
             for row in views['rows']:
                 status, data = self._fetch_properties(scid, row['oid'])
                 if status:
+                    # Fetch the data of sub module
+                    self._get_sub_module_data_for_compare(
+                        sid, did, scid, data, row['oid'])
                     res[row['name']] = data
         else:
             status, data = self._fetch_properties(scid, oid)
@@ -1717,7 +1757,7 @@ class ViewNode(PGChildNodeView, VacuumSettings, SchemaDiffObjectCompare):
 
         return res
 
-    def get_sql_from_diff(self, **kwargs):
+    def get_sql_from_view_diff(self, **kwargs):
         """
         This function is used to get the DDL/DML statements.
         :param kwargs
@@ -1727,15 +1767,15 @@ class ViewNode(PGChildNodeView, VacuumSettings, SchemaDiffObjectCompare):
         sid = kwargs.get('sid')
         did = kwargs.get('did')
         scid = kwargs.get('scid')
-        oid = kwargs.get('oid')
-        data = kwargs.get('data', None)
+        oid = kwargs.get('tid')
+        diff_data = kwargs.get('diff_data', None)
         drop_sql = kwargs.get('drop_sql', False)
         target_schema = kwargs.get('target_schema', None)
 
-        if data:
+        if diff_data:
             if target_schema:
-                data['schema'] = target_schema
-            sql, _ = self.getSQL(gid, sid, did, data, oid)
+                diff_data['schema'] = target_schema
+            sql, _ = self.getSQL(gid, sid, did, diff_data, oid)
             if sql.find('DROP VIEW') != -1:
                 sql = gettext("""
 -- Changing the columns in a view requires dropping and re-creating the view.
@@ -1754,6 +1794,62 @@ class ViewNode(PGChildNodeView, VacuumSettings, SchemaDiffObjectCompare):
                 sql = self.sql(gid=gid, sid=sid, did=did, scid=scid, vid=oid,
                                json_resp=False)
         return sql
+
+    def get_submodule_template_path(self, module_name):
+        """
+        This function is used to get the template path based on module name.
+        :param module_name:
+        :return:
+        """
+        template_path = None
+        if module_name == 'trigger':
+            template_path = self.trigger_template_path
+        elif module_name == 'index':
+            template_path = self.index_template_path
+        elif module_name == 'rule':
+            template_path = self.rules_template_path
+        elif module_name == 'compound_trigger':
+            template_path = self.compound_trigger_template_path
+
+        return template_path
+
+    def get_view_submodules_dependencies(self, **kwargs):
+        """
+        This function is used to get the dependencies of view and it's
+        submodules.
+        :param kwargs:
+        :return:
+        """
+        vid = kwargs['tid']
+        view_dependencies = []
+        view_deps = self.get_dependencies(self.conn, vid)
+        if len(view_deps) > 0:
+            view_dependencies.extend(view_deps)
+
+        # Iterate all the submodules of the table and fetch the dependencies.
+        for module in self.view_sub_modules:
+            module_view = SchemaDiffRegistry.get_node_view(module)
+            template_path = self.get_submodule_template_path(module)
+
+            SQL = render_template("/".join([template_path,
+                                            'nodes.sql']), tid=vid)
+            status, rset = self.conn.execute_2darray(SQL)
+            if not status:
+                return internal_server_error(errormsg=rset)
+
+            for row in rset['rows']:
+                result = module_view.get_dependencies(
+                    self.conn, row['oid'], where=None,
+                    show_system_objects=None, is_schema_diff=True)
+                if len(result) > 0:
+                    view_dependencies.extend(result)
+
+        # Remove the same table from the dependency list
+        for item in view_dependencies:
+            if 'oid' in item and item['oid'] == vid:
+                view_dependencies.remove(item)
+
+        return view_dependencies
 
 
 # Override the operations for materialized view
@@ -2306,6 +2402,9 @@ class MViewNode(ViewNode, VacuumSettings):
         for row in rset['rows']:
             status, data = self._fetch_mview_properties(did, scid, row['oid'])
             if status:
+                # Fetch the data of sub module
+                self._get_sub_module_data_for_compare(
+                    sid, did, scid, data, row['oid'])
                 res[row['name']] = data
 
         return res
@@ -2327,7 +2426,7 @@ class MViewNode(ViewNode, VacuumSettings):
         if server is None:
             return make_json_response(
                 success=0,
-                errormsg=gettext("Could not find the specified server.")
+                errormsg=SERVER_NOT_FOUND
             )
 
         driver = get_driver(PG_DEFAULT_DRIVER)
@@ -2378,14 +2477,7 @@ class MViewNode(ViewNode, VacuumSettings):
             )
         else:
             # For Individual mview stats
-
-            # Check if pgstattuple extension is already created?
-            # if created then only add extended stats
-            status, is_pgstattuple = self.conn.execute_scalar("""
-            SELECT (count(extname) > 0) AS is_pgstattuple
-            FROM pg_catalog.pg_extension
-            WHERE extname='pgstattuple'
-            """)
+            status, is_pgstattuple = check_pgstattuple(self.conn, vid)
             if not status:
                 return internal_server_error(errormsg=is_pgstattuple)
 

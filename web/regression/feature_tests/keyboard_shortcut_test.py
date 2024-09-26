@@ -77,8 +77,6 @@ class KeyboardShortcutFeatureTest(BaseFeatureTest):
                 )
             )
 
-            assert True, "Keyboard shortcut change is unsuccessful."
-
             print("OK", file=sys.stderr)
 
     def _update_preferences(self):
@@ -109,7 +107,7 @@ class KeyboardShortcutFeatureTest(BaseFeatureTest):
             else:
                 attempt -= 1
 
-        maximize_button = self.page.find_by_xpath(
+        maximize_button = self.page.find_by_css_selector(
             NavMenuLocators.maximize_pref_dialogue_css)
         maximize_button.click()
 
@@ -128,10 +126,6 @@ class KeyboardShortcutFeatureTest(BaseFeatureTest):
 
             file_menu.click()
             file_menu.send_keys(key)
-
-        maximize_button = self.page.find_by_xpath(
-            NavMenuLocators.maximize_pref_dialogue_css)
-        maximize_button.click()
 
         # save and close the preference dialog.
         self.page.click_modal('Save')

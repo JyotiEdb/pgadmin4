@@ -161,7 +161,7 @@ function showFilterDialog(pgBrowser, item, queryToolMod, transId,
   let helpUrl = url_for('help.static', {'filename': 'viewdata_filter.html'});
 
   let okCallback = function() {
-    queryToolMod.launch(transId, gridUrl, false, queryToolTitle, {sql_filter: schema._sessData.filter_sql});
+    queryToolMod.launch(transId, gridUrl, false, queryToolTitle, {sql_filter: schema.sessData.filter_sql});
   };
 
   pgBrowser.Events.trigger('pgadmin:utility:show', item,
@@ -188,7 +188,7 @@ export function generateViewDataTitle(pgBrowser, treeIdentifier, custom_title=nu
   );
 
   const namespaceName = retrieveNameSpaceName(parentData);
-  const db_label = !_.isUndefined(backend_entity) && backend_entity != null && backend_entity.hasOwnProperty('db_name') ? backend_entity['db_name'] : getDatabaseLabel(parentData);
+  const db_label = !_.isUndefined(backend_entity) && backend_entity?.hasOwnProperty('db_name') ? backend_entity['db_name'] : getDatabaseLabel(parentData);
   const node = pgBrowser.tree.findNodeByDomElement(treeIdentifier);
 
   let dtg_title_placeholder = '';

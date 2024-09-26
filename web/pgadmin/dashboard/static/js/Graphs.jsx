@@ -8,7 +8,7 @@
 //////////////////////////////////////////////////////////////
 import React, { useEffect, useRef, useState, useReducer, useMemo } from 'react';
 import { DATA_POINT_SIZE } from 'sources/chartjs';
-import ChartContainer from './ChartContainer';
+import ChartContainer from './components/ChartContainer';
 import url_for from 'sources/url_for';
 import axios from 'axios';
 import gettext from 'sources/gettext';
@@ -16,18 +16,18 @@ import {getGCD, getEpoch} from 'sources/utils';
 import {useInterval, usePrevious} from 'sources/custom_hooks';
 import PropTypes from 'prop-types';
 import StreamingChart from '../../../static/js/components/PgChart/StreamingChart';
-import { Grid } from '@material-ui/core';
+import { Grid, useTheme } from '@mui/material';
+import { getChartColor } from '../../../static/js/utils';
 
 export const X_AXIS_LENGTH = 75;
 
 /* Transform the labels data to suit ChartJS */
-export function transformData(labels, refreshRate) {
-  const colors = ['#00BCD4', '#9CCC65', '#E64A19'];
+export function transformData(labels, refreshRate, theme='light') {
   let datasets = Object.keys(labels).map((label, i)=>{
     return {
       label: label,
       data: labels[label] || [],
-      borderColor: colors[i],
+      borderColor: getChartColor(i, theme),
       pointHitRadius: DATA_POINT_SIZE,
     };
   }) || [];
@@ -91,6 +91,7 @@ const chartsDefault = {
 export default function Graphs({preferences, sid, did, pageVisible, enablePoll=true, isTest}) {
   const refreshOn = useRef(null);
   const prevPrefernces = usePrevious(preferences);
+  const theme = useTheme();
 
   const [sessionStats, sessionStatsReduce] = useReducer(statsReducer, chartsDefault['session_stats']);
   const [tpsStats, tpsStatsReduce] = useReducer(statsReducer, chartsDefault['tps_stats']);
@@ -212,15 +213,16 @@ export default function Graphs({preferences, sid, did, pageVisible, enablePoll=t
       <div data-testid='graph-poll-delay' style={{display: 'none'}}>{pollDelay}</div>
       {chartDrawnOnce &&
         <GraphsWrapper
-          sessionStats={transformData(sessionStats, preferences['session_stats_refresh'])}
-          tpsStats={transformData(tpsStats, preferences['tps_stats_refresh'])}
-          tiStats={transformData(tiStats, preferences['ti_stats_refresh'])}
-          toStats={transformData(toStats, preferences['to_stats_refresh'])}
-          bioStats={transformData(bioStats, preferences['bio_stats_refresh'])}
+          sessionStats={transformData(sessionStats, preferences['session_stats_refresh'], theme.name)}
+          tpsStats={transformData(tpsStats, preferences['tps_stats_refresh'], theme.name)}
+          tiStats={transformData(tiStats, preferences['ti_stats_refresh'], theme.name)}
+          toStats={transformData(toStats, preferences['to_stats_refresh'], theme.name)}
+          bioStats={transformData(bioStats, preferences['bio_stats_refresh'], theme.name)}
           errorMsg={errorMsg}
           showTooltip={preferences['graph_mouse_track']}
           showDataPoints={preferences['graph_data_points']}
           lineBorderWidth={preferences['graph_line_border_width']}
+          theme={theme.name}
           isDatabase={did > 0}
           isTest={isTest}
         />
@@ -249,11 +251,12 @@ export function GraphsWrapper(props) {
     showDataPoints: props.showDataPoints,
     showTooltip: props.showTooltip,
     lineBorderWidth: props.lineBorderWidth,
-  }), [props.showTooltip, props.showDataPoints, props.lineBorderWidth]);
+    theme: props.theme,
+  }), [props.showTooltip, props.showDataPoints, props.lineBorderWidth, props.theme]);
 
   return (
     <>
-      <Grid container spacing={1}>
+      <Grid container spacing={0.5}>
         <Grid item md={6}>
           <ChartContainer id='sessions-graph' title={props.isDatabase ?  gettext('Database sessions') : gettext('Server sessions')}
             datasets={props.sessionStats.datasets} errorMsg={props.errorMsg} isTest={props.isTest}>
@@ -266,7 +269,7 @@ export function GraphsWrapper(props) {
           </ChartContainer>
         </Grid>
       </Grid>
-      <Grid container spacing={1} style={{marginTop: '4px', marginBottom: '4px'}}>
+      <Grid container spacing={0.5} style={{marginTop: '4px', marginBottom: '4px'}}>
         <Grid item md={4}>
           <ChartContainer id='ti-graph' title={gettext('Tuples in')} datasets={props.tiStats.datasets} errorMsg={props.errorMsg} isTest={props.isTest}>
             <StreamingChart data={props.tiStats} dataPointSize={DATA_POINT_SIZE} xRange={X_AXIS_LENGTH} options={options} />
@@ -301,6 +304,7 @@ GraphsWrapper.propTypes = {
   showTooltip: PropTypes.bool.isRequired,
   showDataPoints: PropTypes.bool.isRequired,
   lineBorderWidth: PropTypes.number.isRequired,
+  theme: PropTypes.string,
   isDatabase: PropTypes.bool.isRequired,
   isTest: PropTypes.bool,
 };

@@ -31,6 +31,7 @@ RUN apk add --no-cache \
     yarn \
     zlib-dev
 
+COPY .git .git
 # Create the /pgadmin4 directory and copy the source into it. Explicitly
 # remove the node_modules directory as we'll recreate a clean version, as well
 # as various other files we don't want
@@ -46,6 +47,8 @@ WORKDIR /pgadmin4/web
 
 # Build the JS vendor code in the app-builder, and then remove the vendor source.
 RUN export CPPFLAGS="-DPNG_ARM_NEON_OPT=0" && \
+    npm install -g corepack && \
+    corepack enable && \
     yarn set version berry && \
     yarn set version 3 && \
     yarn install && \
@@ -58,7 +61,8 @@ RUN export CPPFLAGS="-DPNG_ARM_NEON_OPT=0" && \
            webpack.* \
            jest.config.js \
            babel.* \
-           ./pgadmin/static/js/generated/.cache
+           ./pgadmin/static/js/generated/.cache \
+           /pgadmin4/.git
 
 #########################################################################
 # Next, create the base environment for Python
@@ -68,7 +72,7 @@ FROM alpine:latest AS env-builder
 
 # Install dependencies
 COPY requirements.txt /
-RUN     apk add --no-cache \
+RUN apk add --no-cache \
         make \
         python3 \
         py3-pip && \
@@ -162,12 +166,12 @@ COPY --from=env-builder /venv /venv
 # Copy in the tools
 COPY --from=tool-builder /usr/local/pgsql /usr/local/
 COPY --from=pg16-builder /usr/local/lib/libpq.so.5.16 /usr/lib/
-COPY --from=pg16-builder /usr/lib/libzstd.so.1.5.5 /usr/lib/
+COPY --from=pg16-builder /usr/lib/libzstd.so.1.5.6 /usr/lib/
 COPY --from=pg16-builder /usr/lib/liblz4.so.1.9.4 /usr/lib/
 
 RUN ln -s libpq.so.5.16 /usr/lib/libpq.so.5 && \
     ln -s libpq.so.5.16 /usr/lib/libpq.so && \
-    ln -s libzstd.so.1.5.5 /usr/lib/libzstd.so.1 && \
+    ln -s libzstd.so.1.5.6 /usr/lib/libzstd.so.1 && \
     ln -s liblz4.so.1.9.4 /usr/lib/liblz4.so.1
 
 WORKDIR /pgadmin4
@@ -185,7 +189,7 @@ COPY LICENSE /pgadmin4/LICENSE
 COPY DEPENDENCIES /pgadmin4/DEPENDENCIES
 
 # Install runtime dependencies and configure everything in one RUN step
-RUN apk add \
+RUN apk add --no-cache \
         python3 \
         py3-pip \
         postfix \
@@ -197,17 +201,17 @@ RUN apk add \
         libedit \
         libldap \
         libcap && \
-    /venv/bin/python3 -m pip install --no-cache-dir gunicorn==20.1.0 && \
+    /venv/bin/python3 -m pip install --no-cache-dir gunicorn==22.0.0 && \
     find / -type d -name '__pycache__' -exec rm -rf {} + && \
     useradd -r -u 5050 -g root -s /sbin/nologin pgadmin && \
-    mkdir -p /var/lib/pgadmin && \
-    chown pgadmin:root /var/lib/pgadmin && \
+    mkdir -p /run/pgadmin /var/lib/pgadmin && \
+    chown pgadmin:root /run/pgadmin /var/lib/pgadmin && \
     chmod g=u /var/lib/pgadmin && \
     touch /pgadmin4/config_distro.py && \
     chown pgadmin:root /pgadmin4/config_distro.py && \
     chmod g=u /pgadmin4/config_distro.py && \
     chmod g=u /etc/passwd && \
-    setcap CAP_NET_BIND_SERVICE=+eip /usr/bin/python3.11 && \
+    setcap CAP_NET_BIND_SERVICE=+eip /usr/bin/python3.12 && \
     echo "pgadmin ALL = NOPASSWD: /usr/sbin/postfix start" > /etc/sudoers.d/postfix && \
     echo "pgadminr ALL = NOPASSWD: /usr/sbin/postfix start" >> /etc/sudoers.d/postfix
 

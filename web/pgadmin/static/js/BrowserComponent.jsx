@@ -21,6 +21,8 @@ import usePreferences from '../../preferences/static/js/store';
 import { getBrowser } from './utils';
 import PropTypes from 'prop-types';
 import Processes from '../../misc/bgprocess/static/js/Processes';
+import { useBeforeUnload } from './custom_hooks';
+import pgWindow from 'sources/window';
 
 
 const objectExplorerGroup  = {
@@ -90,9 +92,23 @@ export default function BrowserComponent({pgAdmin}) {
       ]
     },
   };
-  const {isLoading, failed} = usePreferences();
+  const {isLoading, failed, getPreferencesForModule} = usePreferences();
   let { name: browser } = useMemo(()=>getBrowser(), []);
   const [uiReady, setUiReady] = useState(false);
+  const confirmOnClose = getPreferencesForModule('browser').confirm_on_refresh_close;
+
+  useBeforeUnload({
+    enabled: confirmOnClose,
+    beforeClose: (forceClose)=>{
+      pgAdmin.Browser.notifier.confirm(
+        gettext('Quit pgAdmin 4'),
+        gettext('Are you sure you want to quit the application?'),
+        function() { forceClose(); },
+        function() { return true;},
+      );
+    },
+    isNewTab: true,
+  });
 
   useEffect(()=>{
     if(uiReady) {
@@ -110,9 +126,9 @@ export default function BrowserComponent({pgAdmin}) {
   return (
     <PgAdminContext.Provider value={pgAdmin}>
       <ModalProvider>
-        <NotifierProvider pgAdmin={pgAdmin} onReady={()=>setUiReady(true)}/>
-        {browser != 'Nwjs' && <AppMenuBar />}
-        <div style={{height: (browser != 'Nwjs' ? 'calc(100% - 30px)' : '100%')}}>
+        <NotifierProvider pgAdmin={pgAdmin} pgWindow={pgWindow} onReady={()=>setUiReady(true)}/>
+        {browser != 'Electron' && <AppMenuBar />}
+        <div style={{height: (browser != 'Electron' ? 'calc(100% - 30px)' : '100%')}}>
           <Layout
             getLayoutInstance={(obj)=>{
               pgAdmin.Browser.docker = obj;

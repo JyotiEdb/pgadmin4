@@ -400,6 +400,7 @@ SECURITY_EMAIL_SUBJECT_PASSWORD_CHANGE_NOTICE = \
 CHECK_EMAIL_DELIVERABILITY = False
 SECURITY_EMAIL_VALIDATOR_ARGS = \
     {"check_deliverability": CHECK_EMAIL_DELIVERABILITY}
+ALLOW_SPECIAL_EMAIL_DOMAINS = []
 
 ##########################################################################
 # Upgrade checks
@@ -461,12 +462,36 @@ DEFAULT_BINARY_PATHS = {
     "pg-14": "",
     "pg-15": "",
     "pg-16": "",
+    "pg-17": "",
     "ppas": "",
     "ppas-12": "",
     "ppas-13": "",
     "ppas-14": "",
     "ppas-15": "",
-    "ppas-16": ""
+    "ppas-16": "",
+    "ppas-17": ""
+}
+
+##########################################################################
+
+# Admin can specify fixed binary paths to prevent users from changing.
+# It will take precedence over DEFAULT_BINARY_PATHS.
+
+FIXED_BINARY_PATHS = {
+    "pg": "",
+    "pg-12": "",
+    "pg-13": "",
+    "pg-14": "",
+    "pg-15": "",
+    "pg-16": "",
+    "pg-17": "",
+    "ppas": "",
+    "ppas-12": "",
+    "ppas-13": "",
+    "ppas-14": "",
+    "ppas-15": "",
+    "ppas-16": "",
+    "ppas-17": ""
 }
 
 ##########################################################################
@@ -559,7 +584,16 @@ ALLOW_SAVE_TUNNEL_PASSWORD = False
 # Applicable for desktop mode only
 ##########################################################################
 MASTER_PASSWORD_REQUIRED = True
+##########################################################################
 
+##########################################################################
+# Allow to save master password which is used to encrypt/decrypt saved
+# passwords in the os level secret like Keychain, password store etc.
+# Disabling this will require user to enter master password
+# if MASTER_PASSWORD_REQUIRED is set to True. Note: this is applicable only
+# in case of Desktop mode.
+##########################################################################
+USE_OS_SECRET_STORAGE = True
 ##########################################################################
 
 # pgAdmin encrypts the database connection and ssh tunnel password using a
@@ -802,7 +836,12 @@ OAUTH2_CONFIG = [
         # for OAuth2 provider.
         # This may need to set False, in case of self-signed certificates.
         # Ref: https://github.com/psf/requests/issues/6071
-        'OAUTH2_SSL_CERT_VERIFICATION': True
+        'OAUTH2_SSL_CERT_VERIFICATION': True,
+        # set this variable to invalidate the session of the oauth2 provider
+        # Example for keycloak:
+        # 'OAUTH2_LOGOUT_URL':
+        # 'https://example.com/realms/master/protocol/openid-connect/logout?post_logout_redirect_uri={redirect_uri}&id_token_hint={id_token}'
+        'OAUTH2_LOGOUT_URL': None
     }
 ]
 
@@ -899,6 +938,12 @@ SERVER_HEARTBEAT_TIMEOUT = 30  # In seconds
 # This setting is applicable only for server mode.
 #############################################################################
 ENABLE_SERVER_PASS_EXEC_CMD = False
+
+#############################################################################
+# Number of records to fetch in one batch for server logs.
+##############################################################################
+
+ON_DEMAND_LOG_COUNT = 10000
 
 #############################################################################
 # Patch the default config with custom config and other manipulations

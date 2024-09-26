@@ -500,7 +500,7 @@ class BackupCreateJobTest(BaseTestGenerator):
                  schemas=[],
                  tables=[],
                  database='postgres',
-                 exclude_table_data='table1',
+                 exclude_table_data=['table1'],
              ),
              url=BACKUP_OBJECT_URL,
              expected_cmd_opts=['--exclude-table-data', 'table1'],
@@ -560,12 +560,11 @@ class BackupCreateJobTest(BaseTestGenerator):
                  database='postgres',
                  disable_quoting=True,
                  use_set_session_auth=True,
-                 with_oids=True,
                  dqoute=True
              ),
              url=BACKUP_OBJECT_URL,
              expected_cmd_opts=[VERBOSE, '--quote-all-identifiers',
-                                '--disable-dollar-quoting', '--oids',
+                                '--disable-dollar-quoting',
                                 '--use-set-session-authorization'],
              not_expected_cmd_opts=[],
              expected_exit_code=[0, None]
@@ -588,7 +587,7 @@ class BackupCreateJobTest(BaseTestGenerator):
                  schemas=[],
                  tables=[],
                  database='postgres',
-                 exclude_schema="sch*"
+                 exclude_schema=["sch*"]
              ),
              url=BACKUP_OBJECT_URL,
              expected_cmd_opts=[VERBOSE, '--exclude-schema', 'sch*'],
@@ -707,6 +706,31 @@ class BackupCreateJobTest(BaseTestGenerator):
              server_min_version=160000,
              message='--large-objects is not supported by EPAS/PG server '
                      'less than 16'
+         )),
+        ('When backup the object with option - Exclude table',
+         dict(
+             class_params=dict(
+                 sid=1,
+                 name='test_backup_server',
+                 port=5444,
+                 host='localhost',
+                 database='postgres',
+                 bfile='test_backup',
+                 username='postgres'
+             ),
+             params=dict(
+                 file='test_backup_file',
+                 format='custom',
+                 verbose=True,
+                 schemas=[],
+                 tables=[],
+                 database='postgres',
+                 exclude_table=["table1"]
+             ),
+             url=BACKUP_OBJECT_URL,
+             expected_cmd_opts=['--exclude-table', 'table1'],
+             not_expected_cmd_opts=[],
+             expected_exit_code=[0, None]
          )),
         ('When backup a schema with default options (< v16)',
          dict(
@@ -1149,12 +1173,11 @@ class BackupCreateJobTest(BaseTestGenerator):
                  verbose=True,
                  disable_quoting=True,
                  use_set_session_auth=True,
-                 with_oids=True,
                  dqoute=True
              ),
              url=BACKUP_SERVER_URL,
              expected_cmd_opts=[VERBOSE, '--quote-all-identifiers',
-                                '--disable-dollar-quoting', '--oids',
+                                '--disable-dollar-quoting',
                                 '--use-set-session-authorization'],
              not_expected_cmd_opts=[],
              expected_exit_code=[0, None]

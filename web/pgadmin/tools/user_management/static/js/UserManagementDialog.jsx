@@ -7,7 +7,8 @@
 //
 //////////////////////////////////////////////////////////////
 import React from 'react';
-import { makeStyles } from '@material-ui/core';
+import { Box } from '@mui/material';
+import { styled } from '@mui/material/styles';
 import SchemaView from '../../../../static/js/SchemaView';
 import BaseUISchema from '../../../../static/js/SchemaView/base_schema.ui';
 import pgAdmin from 'sources/pgadmin';
@@ -22,8 +23,15 @@ import { showChangeOwnership } from '../../../../static/js/Dialogs/index';
 import { BROWSER_PANELS } from '../../../../browser/static/js/constants';
 import _ from 'lodash';
 
+const StyledBox = styled(Box)(() => ({
+  height: '100%',
+  '& .UserManagementDialog-root': {
+    padding: 0 + ' !important',
+  }
+}));
+
 class UserManagementCollection extends BaseUISchema {
-  constructor(authSources, roleOptions) {
+  constructor() {
     super({
       id: undefined,
       username: undefined,
@@ -37,9 +45,15 @@ class UserManagementCollection extends BaseUISchema {
     });
 
     this.authOnlyInternal = (current_user['auth_sources'].length  == 1 &&
-      current_user['auth_sources'].includes(AUTH_METHODS['INTERNAL'])) ? true : false;
-    this.authSources = authSources;
-    this.roleOptions = roleOptions;
+      current_user['auth_sources'].includes(AUTH_METHODS['INTERNAL']));
+  }
+
+  setAuthSources(src) {
+    this.authSources = src;
+  }
+
+  setRoleOptions(src) {
+    this.roleOptions = src;
   }
 
   get idAttribute() {
@@ -105,18 +119,22 @@ class UserManagementCollection extends BaseUISchema {
           return obj.isEditable(state) && state.auth_source != AUTH_METHODS['INTERNAL'];
         }
       }, {
-        id: 'role', label: gettext('Role'), cell: 'select',
-        options: obj.roleOptions, minWidth: 95, width: 95,
-        controlProps: {
-          allowClear: false,
-          openOnEnter: false,
-          first_empty: false,
-        },
+        id: 'role', label: gettext('Role'),
+        cell: () => ({
+          cell: 'select',
+          options: obj.roleOptions,
+          controlProps: {
+            allowClear: false,
+            openOnEnter: false,
+            first_empty: false,
+          },
+        }),
+        minWidth: 95, width: 95,
         editable: (state)=> {
           return obj.isEditable(state);
         }
       }, {
-        id: 'active', label: gettext('Active'), cell: 'switch', width: 60, disableResizing: true,
+        id: 'active', label: gettext('Active'), cell: 'switch', width: 60, enableResizing: false,
         editable: (state)=> {
           return obj.isEditable(state);
         }
@@ -137,7 +155,7 @@ class UserManagementCollection extends BaseUISchema {
           return obj.isEditable(state) && state.auth_source == AUTH_METHODS['INTERNAL'];
         }
       }, {
-        id: 'locked', label: gettext('Locked'), cell: 'switch', width: 60, disableResizing: true,
+        id: 'locked', label: gettext('Locked'), cell: 'switch', width: 60, enableResizing: false,
         editable: (state)=> {
           return state.locked;
         }
@@ -146,7 +164,7 @@ class UserManagementCollection extends BaseUISchema {
   }
 
   validate(state, setError) {
-    let msg = undefined;
+    let msg;
     let obj = this;
     let minPassLen = pgAdmin.password_length_min;
     if (obj.isUserNameEnabled(state) && isEmptyString(state.username)) {
@@ -158,11 +176,11 @@ class UserManagementCollection extends BaseUISchema {
     }
 
     if (state.auth_source != AUTH_METHODS['INTERNAL']) {
-      if (obj.isNew(state) && obj.top?._sessData?.userManagement) {
-        for (let i=0; i < obj.top._sessData.userManagement.length; i++) {
-          if (obj.top._sessData.userManagement[i]?.id &&
-            obj.top._sessData.userManagement[i].username.toLowerCase() == state.username.toLowerCase() &&
-            obj.top._sessData.userManagement[i].auth_source == state.auth_source) {
+      if (obj.isNew(state) && obj.top?.sessData?.userManagement) {
+        for (let user of obj.top.sessData.userManagement) {
+          if (user?.id &&
+            user.username.toLowerCase() == state.username.toLowerCase() &&
+            user.auth_source == state.auth_source) {
             msg = gettext('User name \'%s\' already exists', state.username);
             setError('username', msg);
             return true;
@@ -172,7 +190,7 @@ class UserManagementCollection extends BaseUISchema {
     }
 
     if (state.auth_source == AUTH_METHODS['INTERNAL']) {
-      let email_filter = /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+      let email_filter = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
       if (isEmptyString(state.email)) {
         msg = gettext('Email cannot be empty');
         setError('email', msg);
@@ -185,10 +203,10 @@ class UserManagementCollection extends BaseUISchema {
         setError('email', null);
       }
 
-      if (obj.isNew(state) && obj.top?._sessData?.userManagement) {
-        for (let i=0; i < obj.top._sessData.userManagement.length; i++) {
-          if (obj.top._sessData.userManagement[i]?.id &&
-            obj.top._sessData.userManagement[i].email?.toLowerCase() == state.email?.toLowerCase()) {
+      if (obj.isNew(state) && obj.top?.sessData?.userManagement) {
+        for (let user of obj.top.sessData.userManagement) {
+          if (user?.id &&
+            user.email?.toLowerCase() == state.email?.toLowerCase()) {
             msg = gettext('Email address \'%s\' already exists', state.email);
             setError('email', msg);
             return true;
@@ -230,10 +248,18 @@ class UserManagementCollection extends BaseUISchema {
 }
 
 class UserManagementSchema extends BaseUISchema {
-  constructor(authSources, roleOptions) {
+  constructor() {
     super({refreshBrowserTree: false});
-    this.userManagementCollObj = new UserManagementCollection(authSources, roleOptions);
+    this.userManagementCollObj = new UserManagementCollection();
     this.changeOwnership = false;
+  }
+
+  setAuthSources(src) {
+    this.userManagementCollObj.setAuthSources(src);
+  }
+
+  setRoleOptions(src) {
+    this.userManagementCollObj.setRoleOptions(src);
   }
 
   deleteUser(deleteRow) {
@@ -252,8 +278,9 @@ class UserManagementSchema extends BaseUISchema {
     const api = getApiInstance();
     return [
       {
-        id: 'userManagement', label: '', type: 'collection', schema: obj.userManagementCollObj,
-        canAdd: true, canDelete: true, isFullTab: true, group: 'temp_user',
+        id: 'userManagement', label: '', type: 'collection',
+        schema: obj.userManagementCollObj,
+        canAdd: true, canDelete: true, isFullTab: true,
         addOnTop: true,
         canDeleteRow: (row)=>{
           return row['id'] != current_user['id'];
@@ -294,7 +321,8 @@ class UserManagementSchema extends BaseUISchema {
         canSearch: true
       },
       {
-        id: 'refreshBrowserTree', visible: false, type: 'boolean',
+        id: 'refreshBrowserTree', visible: false, type: 'switch',
+        mode: ['non_supported'],
         deps: ['userManagement'], depChange: ()=> {
           return { refreshBrowserTree: this.changeOwnership };
         }
@@ -303,20 +331,13 @@ class UserManagementSchema extends BaseUISchema {
   }
 }
 
-const useStyles = makeStyles((theme)=>({
-  root: {
-    ...theme.mixins.tabPanel,
-    padding: 0,
-  },
-}));
-
 function UserManagementDialog({onClose}) {
-  const classes = useStyles();
+
   const [authSources, setAuthSources] = React.useState([]);
   const [roles, setRoles] = React.useState([]);
   const api = getApiInstance();
-
-  React.useEffect(async ()=>{
+  const schema = React.useRef(null);
+  const fetchData = async () => {
     try {
       api.get(url_for('user_management.auth_sources'))
         .then(res=>{
@@ -336,6 +357,10 @@ function UserManagementDialog({onClose}) {
     } catch (error) {
       pgAdmin.Browser.notifier.error(parseApiError(error));
     }
+  };
+
+  React.useEffect(() => {
+    fetchData();
   }, []);
 
   const onSaveClick = (_isNew, changeData)=>{
@@ -363,7 +388,7 @@ function UserManagementDialog({onClose}) {
             onClose();
           })
           .catch((err)=>{
-            reject(err);
+            reject(err instanceof Error ? err : Error(gettext('Something went wrong')));
           });
       } catch (error) {
         reject(parseApiError(error));
@@ -376,24 +401,33 @@ function UserManagementDialog({onClose}) {
     value: m.value,
   }));
 
-  if(authSourcesOptions.length <= 0) {
-    return <></>;
-  }
-
-  const roleOptions = roles.map((m)=>({
+  const roleOptions = roles.map((m) => ({
     label: m.name,
     value: m.id,
   }));
+
+  if (!schema.current)
+    schema.current = new UserManagementSchema();
+
+  if(authSourcesOptions.length <= 0) {
+    return <></>;
+  }
 
   if(roleOptions.length <= 0) {
     return <></>;
   }
 
+  schema.current.setAuthSources(authSourcesOptions);
+  schema.current.setRoleOptions(roleOptions);
+
   const onDialogHelp = () => {
-    window.open(url_for('help.static', { 'filename': 'user_management.html' }), 'pgadmin_help');
+    window.open(
+      url_for('help.static', { 'filename': 'user_management.html' }),
+      'pgadmin_help'
+    );
   };
 
-  return <SchemaView
+  return <StyledBox><SchemaView
     formType={'dialog'}
     getInitData={()=>{ return new Promise((resolve, reject)=>{
       api.get(url_for('user_management.users'))
@@ -401,10 +435,10 @@ function UserManagementDialog({onClose}) {
           resolve({userManagement:res.data});
         })
         .catch((err)=>{
-          reject(err);
+          reject(err instanceof Error ? err : Error(gettext('Something went wrong')));
         });
     }); }}
-    schema={new UserManagementSchema(authSourcesOptions, roleOptions)}
+    schema={schema.current}
     viewHelperProps={{
       mode: 'edit',
     }}
@@ -414,8 +448,8 @@ function UserManagementDialog({onClose}) {
     hasSQL={false}
     disableSqlHelp={true}
     isTabView={false}
-    formClassName={classes.root}
-  />;
+    formClassName='UserManagementDialog-root'
+  /></StyledBox>;
 }
 
 UserManagementDialog.propTypes = {

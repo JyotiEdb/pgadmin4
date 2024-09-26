@@ -25,7 +25,7 @@ _setup_dirs
 _create_python_virtualenv "redhat"
 _build_runtime
 _build_docs "redhat"
-_copy_code
+_copy_code "redhat"
 _generate_sbom
 
 # Get an RPM-compatible version number
@@ -80,6 +80,8 @@ fi
 cp -rfa %{pga_build_root}/server/* \${RPM_BUILD_ROOT}
 
 %files
+%defattr(-,root,root,755)
+%dir /usr/pgadmin4
 /usr/pgadmin4/*
 EOF
 
@@ -121,6 +123,8 @@ cp -rfa %{pga_build_root}/desktop/* \${RPM_BUILD_ROOT}
 /bin/xdg-icon-resource forceupdate
 
 %files
+%defattr(-,root,root,755)
+%attr(755,root,root) /usr/pgadmin4/bin/pgadmin4
 /usr/pgadmin4/bin/*
 /usr/share/icons/hicolor/128x128/apps/*
 /usr/share/icons/hicolor/64x64/apps/*
@@ -131,7 +135,9 @@ cp -rfa %{pga_build_root}/desktop/* \${RPM_BUILD_ROOT}
 /usr/pgadmin4/sbom-desktop.json
 EOF
 
-# Build the Redhat package for the server
+
+
+# Build the Redhat package for the desktop
 rpmbuild --define "pga_build_root ${BUILDROOT}" -bb "${BUILDROOT}/desktop.spec"
 
 
@@ -168,6 +174,7 @@ The web interface for pgAdmin, hosted under Apache HTTPD. pgAdmin is the most po
 cp -rfa %{pga_build_root}/web/* \${RPM_BUILD_ROOT}
 
 %files
+%defattr(-,root,root,755)
 /usr/pgadmin4/bin/*
 %config(noreplace) /etc/httpd/conf.d/*
 /usr/pgadmin4/sbom-web.json

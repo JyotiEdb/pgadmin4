@@ -38,7 +38,6 @@
 
 define('pgadmin.browser.utils',
   ['sources/pgadmin'], function(pgAdmin) {
-
   let pgBrowser = pgAdmin.Browser = pgAdmin.Browser || {};
 
   pgBrowser['MainMenus'] = [];
@@ -62,6 +61,8 @@ define('pgadmin.browser.utils',
   /* GET Binary Path Browse config */
   pgAdmin['enable_binary_path_browsing'] = '{{ current_app.config.get('ENABLE_BINARY_PATH_BROWSING') }}' == 'True';
 
+  pgAdmin['fixed_binary_paths'] = {{ current_app.config.get('FIXED_BINARY_PATHS') }};
+
   /* GET the pgadmin server's locale */
   pgAdmin['pgadmin_server_locale'] =  '{{pgadmin_server_locale}}';
 
@@ -79,17 +80,20 @@ define('pgadmin.browser.utils',
      'server_group', 'server', 'coll-tablespace', 'tablespace',
      'coll-role', 'role', 'coll-resource_group', 'resource_group',
      'coll-database', 'coll-pga_job', 'coll-pga_schedule', 'coll-pga_jobstep',
-     'pga_job', 'pga_schedule', 'pga_jobstep'
+     'pga_job', 'pga_schedule', 'pga_jobstep',
+     'coll-replica_node', 'replica_node'
   ];
 
   pgBrowser.utils = {
-    layout: '{{ layout }}',
+    layout: {{ layout|tojson }},
+    theme: '{{ theme }}',
     pg_help_path: '{{ pg_help_path }}',
     tabSize: '{{ editor_tab_size }}',
     wrapCode: '{{ editor_wrap_code }}' == 'True',
     useSpaces: '{{ editor_use_spaces }}',
     insertPairBrackets: '{{ editor_insert_pair_brackets }}' == 'True',
     braceMatching: '{{ editor_brace_matching }}' == 'True',
+    highlightSelectionMatches: '{{editor_highlight_selection_matches}}' == 'True',
     is_indent_with_tabs: '{{ editor_indent_with_tabs }}' == 'True',
     app_name: '{{ app_name }}',
     app_version_int: '{{ app_version_int}}',

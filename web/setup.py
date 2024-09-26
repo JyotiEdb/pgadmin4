@@ -17,6 +17,7 @@ from rich.console import Console
 from rich.table import Table
 from rich import box, print
 import json as jsonlib
+from functools import wraps
 
 console = Console()
 app = typer.Typer()
@@ -46,17 +47,37 @@ from typing import Optional, List
 from typing_extensions import Annotated
 from pgadmin.utils.constants import INTERNAL, LDAP, OAUTH2, \
     KERBEROS, WEBSERVER
-from pgadmin.tools.user_management import create_user, delete_user, update_user
+from pgadmin.tools.user_management import create_user, delete_user, \
+    update_user as user_management_update_user
 from enum import Enum
 from flask_babel import gettext
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
+USER_NOT_FOUND_STR = "User not found"
+SOMETHING_WENT_WRONG = 'Something went wrong. '
+
+
+def update_sqlite_path(f):
+    """
+    This function will behave as a decorator which will check if
+    sqlite path is provided and will update it in config
+    """
+
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        if kwargs and kwargs.get('sqlite_path') is not None:
+            # update the sqlite path
+            config.SQLITE_PATH = kwargs['sqlite_path']
+        return f(*args, **kwargs)
+
+    return wrap
 
 
 class ManageServers:
 
     @app.command()
+    @update_sqlite_path
     def dump_servers(output_file: str, user: Optional[str] = None,
                      auth_source: Optional[str] = INTERNAL,
                      sqlite_path: Optional[str] = None,
@@ -65,10 +86,6 @@ class ManageServers:
 
         # What user?
         dump_user = user if user is not None else config.DESKTOP_USER
-
-        # And the sqlite path
-        if sqlite_path is not None:
-            config.SQLITE_PATH = sqlite_path
 
         print('----------')
         print('Dumping servers with:')
@@ -85,6 +102,7 @@ class ManageServers:
             print(str(e))
 
     @app.command()
+    @update_sqlite_path
     def load_servers(input_file: str, user: Optional[str] = None,
                      auth_source: Optional[str] = INTERNAL,
                      sqlite_path: Optional[str] = None,
@@ -95,10 +113,6 @@ class ManageServers:
 
         # What user?
         load_user = user if user is not None else config.DESKTOP_USER
-
-        # And the sqlite path
-        if sqlite_path is not None:
-            config.SQLITE_PATH = sqlite_path
 
         print('----------')
         print('Loading servers with:')
@@ -136,13 +150,15 @@ class AuthType(str, Enum):
 class ManageUsers:
 
     @app.command()
+    @update_sqlite_path
     def add_user(email: str, password: str,
                  role: Annotated[Optional[bool], typer.Option(
                      "--admin/--nonadmin")] = False,
                  active: Annotated[Optional[bool],
                                    typer.Option("--active/--inactive")] = True,
                  console: Optional[bool] = True,
-                 json: Optional[bool] = False
+                 json: Optional[bool] = False,
+                 sqlite_path: Optional[str] = None,
                  ):
         """Add Internal user. """
 
@@ -157,6 +173,7 @@ class ManageUsers:
         ManageUsers.create_user(data, console, json)
 
     @app.command()
+    @update_sqlite_path
     def add_external_user(username: str,
                           auth_source: AuthExtTypes = AuthExtTypes.oauth2,
                           email: Optional[str] = None,
@@ -167,7 +184,8 @@ class ManageUsers:
                                             typer.Option(
                                                 "--active/--inactive")] = True,
                           console: Optional[bool] = True,
-                          json: Optional[bool] = False
+                          json: Optional[bool] = False,
+                          sqlite_path: Optional[str] = None,
                           ):
         """Add external user, other than Internal like
         Ldap, Ouath2, Kerberos, Webserver. """
@@ -182,29 +200,34 @@ class ManageUsers:
         ManageUsers.create_user(data, console, json)
 
     @app.command()
+    @update_sqlite_path
     def delete_user(username: str,
                     auth_source: AuthType = AuthType.internal,
                     auto_confirm: Annotated[Optional[bool],
                                             typer.Option(
-                                                "--yes")] = False
+                                                "--yes")] = False,
+                    sqlite_path: Optional[str] = None,
                     ):
         """Delete the user. """
+
         confirm_msg = "Are you sure you want to delete it?"
+
         if auto_confirm or typer.confirm(confirm_msg):
             app = create_app(config.APP_NAME + '-cli')
             with app.test_request_context():
                 uid = ManageUsers.get_user(username=username,
                                            auth_source=auth_source)
                 if not uid:
-                    print("User not found")
+                    print(USER_NOT_FOUND_STR)
                 else:
                     status, msg = delete_user(uid)
                     if status:
                         print('User deleted successfully.')
                     else:
-                        print('Something went wrong. ' + str(msg))
+                        print(SOMETHING_WENT_WRONG + str(msg))
 
     @app.command()
+    @update_sqlite_path
     def update_user(email: str,
                     password: Optional[str] = None,
                     role: Annotated[Optional[bool],
@@ -214,7 +237,8 @@ class ManageUsers:
                                       typer.Option("--active/--inactive"
                                                    )] = None,
                     console: Optional[bool] = True,
-                    json: Optional[bool] = False
+                    json: Optional[bool] = False,
+                    sqlite_path: Optional[str] = None,
                     ):
         """Update internal user."""
 
@@ -223,7 +247,10 @@ class ManageUsers:
             if len(password) < 6:
                 print("Password must be at least 6 characters long.")
                 exit()
-            data['password'] = password
+            # validate_password relies on the new password being present as
+            # `newPassword` and `confirmPassword` in the data
+            data['newPassword'] = password
+            data['confirmPassword'] = password
 
         if role is not None:
             data['role'] = 1 if role else 2
@@ -235,31 +262,34 @@ class ManageUsers:
             uid = ManageUsers.get_user(username=email,
                                        auth_source=INTERNAL)
             if not uid:
-                print("User not found")
+                print(USER_NOT_FOUND_STR)
             else:
-                status, msg = update_user(uid, data)
+                status, msg = user_management_update_user(uid, data)
                 if status:
                     _user = ManageUsers.get_users_from_db(username=email,
                                                           auth_source=INTERNAL,
                                                           console=False)
                     ManageUsers.display_user(_user[0], console, json)
                 else:
-                    print('Something went wrong. ' + str(msg))
+                    print(SOMETHING_WENT_WRONG + str(msg))
 
     @app.command()
+    @update_sqlite_path
     def get_users(username: Optional[str] = None,
                   auth_source: AuthType = None,
-                  json: Optional[bool] = False
+                  json: Optional[bool] = False,
+                  sqlite_path: Optional[str] = None,
                   ):
+
         ManageUsers.get_users_from_db(username, auth_source, True, json)
 
-    @app.command()
     def get_users_from_db(username: Optional[str] = None,
                           auth_source: AuthType = None,
                           console: Optional[bool] = True,
-                          json: Optional[bool] = False
+                          json: Optional[bool] = False,
                           ):
         """Get user(s) details."""
+
         app = create_app(config.APP_NAME + '-cli')
         with app.test_request_context():
             if username and auth_source:
@@ -288,6 +318,7 @@ class ManageUsers:
                 return users_data
 
     @app.command()
+    @update_sqlite_path
     def update_external_user(username: str,
                              auth_source: AuthExtTypes = AuthExtTypes.oauth2,
                              email: Optional[str] = None,
@@ -298,7 +329,8 @@ class ManageUsers:
                                  Optional[bool],
                                  typer.Option("--active/--inactive")] = None,
                              console: Optional[bool] = True,
-                             json: Optional[bool] = False
+                             json: Optional[bool] = False,
+                             sqlite_path: Optional[str] = None,
                              ):
         """Update external users other than Internal like
          Ldap, Ouath2, Kerberos, Webserver."""
@@ -316,16 +348,18 @@ class ManageUsers:
             uid = ManageUsers.get_user(username=username,
                                        auth_source=auth_source)
             if not uid:
-                print("User not found")
+                print(USER_NOT_FOUND_STR)
             else:
-                status, msg = update_user(uid, data)
+                status, msg = user_management_update_user(uid, data)
                 if status:
-                    _user = ManageUsers.get_users(username=username,
-                                                  auth_source=auth_source,
-                                                  console=False)
+                    _user = ManageUsers.get_users_from_db(
+                        username=username,
+                        auth_source=auth_source,
+                        console=False
+                    )
                     ManageUsers.display_user(_user[0], console, json)
                 else:
-                    print('Something went wrong. ' + str(msg))
+                    print(SOMETHING_WENT_WRONG + str(msg))
 
     def create_user(data, console, json):
         app = create_app(config.APP_NAME + '-cli')
@@ -346,7 +380,7 @@ class ManageUsers:
             if status:
                 ManageUsers.display_user(data, console, json)
             else:
-                print('Something went wrong. ' + str(msg))
+                print(SOMETHING_WENT_WRONG + str(msg))
 
     def get_user(username=None, auth_source=INTERNAL):
         app = create_app(config.APP_NAME + '-cli')
@@ -399,7 +433,11 @@ class ManagePreferences:
             return usr.id
 
     @app.command()
-    def get_prefs(json: Optional[bool] = False):
+    @update_sqlite_path
+    def get_prefs(json: Optional[bool] = False,
+                  sqlite_path: Optional[str] = None,
+                  ):
+
         return ManagePreferences.fetch_prefs()
 
     def fetch_prefs(id: Optional[bool] = None, json: Optional[bool] = False):
@@ -447,14 +485,19 @@ class ManagePreferences:
                     print(table)
 
     @app.command()
+    @update_sqlite_path
     def set_prefs(username,
                   pref_options: Annotated[Optional[List[str]],
                                           typer.Argument()] = None,
                   auth_source: AuthType = AuthType.internal,
                   console: Optional[bool] = True,
                   json: Optional[bool] = False,
-                  input_file: Optional[str] = None):
+                  input_file: Optional[str] = None,
+                  sqlite_path: Optional[str] = None,
+                  ):
         """Set User preferences."""
+        if not pref_options:
+            pref_options = []
 
         if input_file:
             from urllib.parse import unquote
@@ -485,7 +528,7 @@ class ManagePreferences:
         table = Table(title="Updated Pref Details", box=box.ASCII)
         table.add_column("Preference", style="green")
         if not user_id:
-            print("User not found.")
+            print(USER_NOT_FOUND_STR)
             return
 
         prefs = ManagePreferences.fetch_prefs(True)
@@ -506,9 +549,9 @@ class ManagePreferences:
                 if f in prefs:
                     ids = prefs[f].split(":")
                     _row = {
-                        'mid': ids[0],
-                        'category_id': ids[1],
-                        'id': ids[2],
+                        'mid': int(ids[0]),
+                        'category_id': int(ids[1]),
+                        'id': int(ids[2]),
                         'name': final_opt[2],
                         'user_id': user_id,
                         'value': val}
@@ -593,5 +636,9 @@ def setup_db(app: Annotated[str, typer.Argument(
         run_migration_for_sqlite()
 
 
-if __name__ == "__main__":
+def main():
     app()
+
+
+if __name__ == "__main__":
+    main()

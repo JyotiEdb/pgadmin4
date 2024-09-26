@@ -15,13 +15,23 @@ export default class Menu {
     this.name = name;
     this.id = id;
     this.index = index || 1;
-    this.menuItems = [],
+    this.menuItems = [];
     this.addSepratior = addSepratior || false;
   }
 
   static create(name, label, id, index, addSepratior) {
     let menuObj = new Menu(name, label, id, index, addSepratior);
     return menuObj;
+  }
+
+  serialize() {
+    return {
+      id: this.id,
+      label: this.label,
+      name: this.name,
+      index: this.index,
+      addSepratior: this.addSepratior,
+    };
   }
 
   addMenuItem(menuItem, index=null) {
@@ -106,7 +116,7 @@ export default class Menu {
 
 
 export class MenuItem {
-  constructor(options, onDisableChange, onChangeChecked) {
+  constructor(options, onDisableChange) {
     let menu_opts = [
       'name', 'label', 'priority', 'module', 'callback', 'data', 'enable',
       'category', 'target', 'url', 'node',
@@ -116,7 +126,6 @@ export class MenuItem {
       url: '#',
       target: '_self',
       enable: true,
-      type: 'normal'
     };
     _.extend(this, defaults, _.pick(options, menu_opts));
     if (!this.callback) {
@@ -127,7 +136,6 @@ export class MenuItem {
       };
     }
     this.onDisableChange = onDisableChange;
-    this.changeChecked = onChangeChecked;
     this._isDisabled = true;
     this.checkAndSetDisabled();
   }
@@ -136,9 +144,19 @@ export class MenuItem {
     return MenuItem(options);
   }
 
+  serialize() {
+    return {
+      name: this.name,
+      label: this.label,
+      enabled: !this.isDisabled,
+      priority: this.priority,
+      type: [true, false].includes(this.checked) ? 'checkbox' : this.type,
+      checked: this.checked,
+    };
+  }
+
   change_checked(isChecked) {
     this.checked = isChecked;
-    this.changeChecked?.(this);
   }
 
   getMenuItems() {
@@ -202,7 +220,7 @@ export class MenuItem {
       return true;
     }
     if (this.module && _.isFunction(this.module[this.enable])) {
-      return !(this.module[this.enable]).apply(this.module, [node, item, this.data]);
+      return !(this.module[this.enable])(node, item, this.data);
     }
 
     return false;

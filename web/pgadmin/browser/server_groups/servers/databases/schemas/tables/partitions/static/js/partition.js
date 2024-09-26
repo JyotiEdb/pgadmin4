@@ -216,7 +216,7 @@ function(
 
           pgAdmin.Browser.notifier.confirm(
             gettext('Truncate Table'),
-            gettext('Are you sure you want to truncate table %s?', d.label),
+            gettext('Are you sure you want to truncate table <b>%s</b>?', d.label),
             function () {
               let data = d;
               getApiInstance().put(obj.generate_url(i, 'truncate' , d, true), params)
@@ -322,14 +322,14 @@ function(
       canCreate: SchemaChildTreeNode.isTreeItemOfChildOfSchema,
       // Check to whether table has disable trigger(s)
       canCreate_with_trigger_enable: function(itemData, item, data) {
-        if(this.canCreate.apply(this, [itemData, item, data])) {
+        if(this.canCreate(itemData, item, data)) {
           // We are here means we can create menu, now let's check condition
           return (itemData.tigger_count > 0);
         }
       },
       // Check to whether table has enable trigger(s)
       canCreate_with_trigger_disable: function(itemData, item, data) {
-        if(this.canCreate.apply(this, [itemData, item, data])) {
+        if(this.canCreate(itemData, item, data)) {
           // We are here means we can create menu, now let's check condition
           return (itemData.tigger_count > 0 && itemData.has_enable_triggers > 0);
         }

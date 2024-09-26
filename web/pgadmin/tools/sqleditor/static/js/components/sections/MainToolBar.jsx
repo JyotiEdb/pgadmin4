@@ -7,127 +7,43 @@
 //
 //////////////////////////////////////////////////////////////
 import React, {useContext, useCallback, useEffect, useState} from 'react';
-import { makeStyles } from '@material-ui/styles';
-import { Box } from '@material-ui/core';
+import { styled } from '@mui/material/styles';
+import { Box } from '@mui/material';
 import { PgButtonGroup, PgIconButton } from '../../../../../../static/js/components/Buttons';
-import FolderRoundedIcon from '@material-ui/icons/FolderRounded';
-import KeyboardArrowDownIcon from '@material-ui/icons/KeyboardArrowDown';
-import SaveRoundedIcon from '@material-ui/icons/SaveRounded';
-import StopRoundedIcon from '@material-ui/icons/StopRounded';
-import PlayArrowRoundedIcon from '@material-ui/icons/PlayArrowRounded';
-import { FilterIcon, CommitIcon, RollbackIcon } from '../../../../../../static/js/components/ExternalIcon';
-import EditRoundedIcon from '@material-ui/icons/EditRounded';
-import AssessmentRoundedIcon from '@material-ui/icons/AssessmentRounded';
-import ExplicitRoundedIcon from '@material-ui/icons/ExplicitRounded';
-import FormatListNumberedRoundedIcon from '@material-ui/icons/FormatListNumberedRounded';
-import HelpIcon from '@material-ui/icons/HelpRounded';
+import FolderRoundedIcon from '@mui/icons-material/FolderRounded';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
+import StopRoundedIcon from '@mui/icons-material/StopRounded';
+import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
+import { FilterIcon, CommitIcon, RollbackIcon, ExecuteQueryIcon } from '../../../../../../static/js/components/ExternalIcon';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
+import ExplicitRoundedIcon from '@mui/icons-material/ExplicitRounded';
+import FormatListNumberedRoundedIcon from '@mui/icons-material/FormatListNumberedRounded';
+import HelpIcon from '@mui/icons-material/HelpRounded';
 import {QUERY_TOOL_EVENTS, CONNECTION_STATUS} from '../QueryToolConstants';
 import { QueryToolConnectionContext, QueryToolContext, QueryToolEventsContext } from '../QueryToolComponent';
 import { PgMenu, PgMenuDivider, PgMenuItem, usePgMenuGroup } from '../../../../../../static/js/components/Menu';
 import gettext from 'sources/gettext';
 import { useKeyboardShortcuts } from '../../../../../../static/js/custom_hooks';
-import {shortcut_key} from 'sources/keyboard_shortcuts';
 import url_for from 'sources/url_for';
 import _ from 'lodash';
 import { InputSelectNonSearch } from '../../../../../../static/js/components/FormComponents';
 import PropTypes from 'prop-types';
 import CustomPropTypes from '../../../../../../static/js/custom_prop_types';
 import ConfirmTransactionContent from '../dialogs/ConfirmTransactionContent';
-import { isMac } from '../../../../../../static/js/keyboard_shortcuts';
 import { LayoutDocker } from '../../../../../../static/js/helpers/Layout';
 import CloseRunningDialog from '../dialogs/CloseRunningDialog';
 
-const useStyles = makeStyles((theme)=>({
-  root: {
-    padding: '2px 4px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    backgroundColor: theme.otherVars.editorToolbarBg,
-    flexWrap: 'wrap',
-    ...theme.mixins.panelBorder.bottom,
-  },
+const StyledBox = styled(Box)(({theme}) => ({
+  padding: '2px 4px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
+  backgroundColor: theme.otherVars.editorToolbarBg,
+  flexWrap: 'wrap',
+  ...theme.mixins.panelBorder.bottom,
 }));
-
-const FIXED_PREF = {
-  find: {
-    'control': true,
-    ctrl_is_meta: true,
-    'shift': false,
-    'alt': false,
-    'key': {
-      'key_code': 70,
-      'char': 'F',
-    },
-  },
-  replace: {
-    'control': true,
-    ctrl_is_meta: true,
-    'shift': isMac() ? false : true,
-    'alt': isMac() ? true : false,
-    'key': {
-      'key_code': 70,
-      'char': 'F',
-    },
-  },
-  gotolinecol: {
-    'control': true,
-    ctrl_is_meta: true,
-    'shift': false,
-    'alt': false,
-    'key': {
-      'key_code': 76,
-      'char': 'L',
-    },
-  },
-  indent: {
-    'control': false,
-    'shift': false,
-    'alt': false,
-    'key': {
-      'key_code': 9,
-      'char': 'Tab',
-    },
-  },
-  unindent: {
-    'control': false,
-    'shift': true,
-    'alt': false,
-    'key': {
-      'key_code': 9,
-      'char': 'Tab',
-    },
-  },
-  comment: {
-    'control': true,
-    ctrl_is_meta: true,
-    'shift': false,
-    'alt': false,
-    'key': {
-      'key_code': 191,
-      'char': '/',
-    },
-  },
-  uncomment: {
-    'control': true,
-    ctrl_is_meta: true,
-    'shift': false,
-    'alt': false,
-    'key': {
-      'key_code': 190,
-      'char': '.',
-    },
-  },
-  format_sql: {
-    'control': true,
-    'shift': true,
-    'alt': false,
-    'key': {
-      'key_code': 75,
-      'char': 'k',
-    },
-  },
-};
 
 function autoCommitRollback(type, api, transId, value) {
   let url = url_for(`sqleditor.${type}`, {
@@ -136,8 +52,7 @@ function autoCommitRollback(type, api, transId, value) {
   return api.post(url, JSON.stringify(value));
 }
 
-export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
-  const classes = useStyles();
+export function MainToolBar({containerRef, onFilterClick, onManageMacros, onAddToMacros}) {
   const eventBus = useContext(QueryToolEventsContext);
   const queryToolCtx = useContext(QueryToolContext);
   const queryToolConnCtx = useContext(QueryToolConnectionContext);
@@ -170,7 +85,14 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
     setButtonsDisabled((prev)=>({...prev, [name]: disable}));
   }, []);
 
-  const executeQuery = useCallback(()=>{
+  const executeCursor = useCallback(()=>{
+    if(!queryToolCtx.preferences.sqleditor.underline_query_cursor && queryToolCtx.preferences.sqleditor.underlined_query_execute_warning){
+      eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTE_CURSOR_WARNING);
+    } else {
+      eventBus.fireEvent(QUERY_TOOL_EVENTS.TRIGGER_EXECUTION, null, '', true);
+    }
+  }, [queryToolCtx.preferences.sqleditor]);
+  const executeScript = useCallback(()=>{
     eventBus.fireEvent(QUERY_TOOL_EVENTS.TRIGGER_EXECUTION);
   }, []);
   const cancelQuery = useCallback(()=>{
@@ -324,7 +246,7 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
     queryToolCtx.modal.showModal(gettext('Commit transaction?'), (closeModal)=>(
       <ConfirmTransactionContent
         closeModal={closeModal}
-        text={gettext('The current transaction is not commited to the database. '
+        text={gettext('The current transaction is not committed to the database. '
           +'Do you want to commit or rollback the transaction?')}
         onRollback={()=>{
           onExecutionDone();
@@ -354,10 +276,10 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
   }, [queryToolConnCtx.connectionStatus]);
 
   const onCommitClick=()=>{
-    eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, 'COMMIT;', null, true);
+    eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, 'COMMIT;', null, '', true);
   };
   const onRollbackClick=()=>{
-    eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, 'ROLLBACK;', null, true);
+    eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, 'ROLLBACK;', null, '', true);
   };
   const executeMacro = (m)=>{
     eventBus.fireEvent(QUERY_TOOL_EVENTS.TRIGGER_EXECUTION, null, m.sql);
@@ -399,6 +321,8 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
     );
   };
 
+  const executeCmd = (cmd)=>eventBus.fireEvent(QUERY_TOOL_EVENTS.EDITOR_EXEC_CMD, cmd);
+
   useEffect(()=>{
     if(queryToolPref) {
       /* Get the prefs first time */
@@ -421,9 +345,63 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
   /* Button shortcuts */
   useKeyboardShortcuts([
     {
-      shortcut: queryToolPref.execute_query,
+      shortcut: queryToolPref.btn_open_file,
       options: {
-        callback: ()=>{!buttonsDisabled['execute']&&executeQuery();}
+        callback: ()=>{openFile();}
+      }
+    },
+    {
+      shortcut: queryToolPref.btn_save_file,
+      options: {
+        callback: ()=>{!buttonsDisabled['save']&&saveFile(false);}
+      }
+    },
+    {
+      shortcut: queryToolPref.btn_edit_options,
+      options: {
+        callback: ()=>{queryToolCtx.params.is_query_tool&&toggleMenu({
+          currentTarget: {name: 'menu-edit'}
+        });}
+      }
+    },
+    {
+      shortcut: queryToolPref.btn_filter_dialog,
+      options: {
+        callback: ()=>{!buttonsDisabled['filter']&&onFilterClick();}
+      }
+    },
+    {
+      shortcut: queryToolPref.btn_filter_options,
+      options: {
+        callback: ()=>{!buttonsDisabled['filter']&&toggleMenu({
+          currentTarget: {name: 'menu-filter'}
+        });}
+      }
+    },
+    {
+      shortcut: queryToolPref.btn_cancel_query,
+      options: {
+        callback: ()=>{!buttonsDisabled['cancel']&&cancelQuery();}
+      }
+    },
+    {
+      shortcut: queryToolPref.btn_execute_options,
+      options: {
+        callback: ()=>{!buttonsDisabled['execute-options']&&toggleMenu({
+          currentTarget: {name: 'menu-autocommit'}
+        });}
+      }
+    },
+    {
+      shortcut: queryToolPref.execute_script,
+      options: {
+        callback: ()=>{!buttonsDisabled['execute']&&executeScript();}
+      }
+    },
+    {
+      shortcut: queryToolPref.execute_cursor,
+      options: {
+        callback: ()=>{!buttonsDisabled['execute']&&executeCursor();}
       }
     },
     {
@@ -451,12 +429,6 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
       }
     },
     {
-      shortcut: FIXED_PREF.format_sql,
-      options: {
-        callback: ()=>{formatSQL();}
-      }
-    },
-    {
       shortcut: queryToolPref.toggle_case,
       options: {
         callback: ()=>{toggleCase();}
@@ -466,6 +438,12 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
       shortcut: queryToolPref.clear_query,
       options: {
         callback: ()=>{clearQuery();}
+      }
+    },
+    {
+      shortcut: queryToolPref.format_sql,
+      options: {
+        callback: ()=>{formatSQL();}
       }
     },
   ], containerRef);
@@ -518,13 +496,13 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
   ], containerRef);
 
   return (
-    <>
-      <Box className={classes.root}>
+    (<>
+      <StyledBox>
         <PgButtonGroup size="small">
           <PgIconButton title={gettext('Open File')} icon={<FolderRoundedIcon />} disabled={!queryToolCtx.params.is_query_tool}
-            accesskey={shortcut_key(queryToolPref.btn_open_file)} onClick={openFile} />
+            shortcut={queryToolPref.btn_open_file} onClick={openFile} />
           <PgIconButton title={gettext('Save File')} icon={<SaveRoundedIcon />}
-            accesskey={shortcut_key(queryToolPref.btn_save_file)} disabled={buttonsDisabled['save'] || !queryToolCtx.params.is_query_tool}
+            shortcut={queryToolPref.btn_save_file} disabled={buttonsDisabled['save'] || !queryToolCtx.params.is_query_tool}
             onClick={()=>{saveFile(false);}} />
           <PgIconButton title={gettext('File')} icon={<KeyboardArrowDownIcon />} splitButton disabled={!queryToolCtx.params.is_query_tool}
             name="menu-saveas" ref={saveAsMenuRef} onClick={toggleMenu}
@@ -533,14 +511,14 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
         <PgButtonGroup size="small">
           <PgIconButton title={gettext('Edit')} icon={
             <><EditRoundedIcon /><KeyboardArrowDownIcon style={{marginLeft: '-10px'}} /></>}
-          disabled={!queryToolCtx.params.is_query_tool}
-          name="menu-edit" ref={editMenuRef} onClick={toggleMenu} />
+          disabled={!queryToolCtx.params.is_query_tool} shortcut={queryToolPref.btn_edit_options}
+          name="menu-edit" ref={editMenuRef} onClick={toggleMenu}  />
         </PgButtonGroup>
-        <PgButtonGroup size="small" color={highlightFilter ? 'primary' : 'default'}>
-          <PgIconButton title={gettext('Sort/Filter')} icon={<FilterIcon />}
-            onClick={onFilterClick} disabled={buttonsDisabled['filter']} accesskey={shortcut_key(queryToolPref.btn_filter_dialog)}/>
-          <PgIconButton title={gettext('Filter options')} icon={<KeyboardArrowDownIcon />} splitButton
-            disabled={buttonsDisabled['filter']} name="menu-filter" ref={filterMenuRef} accesskey={shortcut_key(queryToolPref.btn_filter_options)}
+        <PgButtonGroup size="small" >
+          <PgIconButton title={gettext('Sort/Filter')} color={highlightFilter ? 'primary' : 'default'} icon={<FilterIcon />}
+            onClick={onFilterClick} disabled={buttonsDisabled['filter']} shortcut={queryToolPref.btn_filter_dialog}/>
+          <PgIconButton title={gettext('Filter options')} color={highlightFilter ? 'primary' : 'default'} icon={<KeyboardArrowDownIcon />} splitButton
+            disabled={buttonsDisabled['filter']} name="menu-filter" ref={filterMenuRef} shortcut={queryToolPref.btn_filter_options}
             onClick={toggleMenu} />
         </PgButtonGroup>
         <InputSelectNonSearch options={[
@@ -551,11 +529,13 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
         ]} value={limit} onChange={onLimitChange} disabled={buttonsDisabled['limit'] || queryToolCtx.params.is_query_tool} />
         <PgButtonGroup size="small">
           <PgIconButton title={gettext('Cancel query')} icon={<StopRoundedIcon style={{height: 'unset'}} />}
-            onClick={cancelQuery} disabled={buttonsDisabled['cancel']} accesskey={shortcut_key(queryToolPref.btn_cancel_query)} />
+            onClick={cancelQuery} disabled={buttonsDisabled['cancel']} shortcut={queryToolPref.btn_cancel_query} />
           <PgIconButton title={gettext('Execute script')} icon={<PlayArrowRoundedIcon style={{height: 'unset'}} />}
-            onClick={executeQuery} disabled={buttonsDisabled['execute']} shortcut={queryToolPref.execute_query}/>
+            onClick={executeScript} disabled={buttonsDisabled['execute']} shortcut={queryToolPref.execute_script}/>
+          <PgIconButton title={gettext('Execute query')} icon={<ExecuteQueryIcon style={{padding: '2px 5px'}} />}
+            onClick={executeCursor} disabled={buttonsDisabled['execute'] || !queryToolCtx.params.is_query_tool} shortcut={queryToolPref.execute_cursor}/>
           <PgIconButton title={gettext('Execute options')} icon={<KeyboardArrowDownIcon />} splitButton
-            name="menu-autocommit" ref={autoCommitMenuRef} accesskey={shortcut_key(queryToolPref.btn_delete_row)}
+            name="menu-autocommit" ref={autoCommitMenuRef} shortcut={queryToolPref.btn_execute_options}
             onClick={toggleMenu} disabled={buttonsDisabled['execute-options']}/>
         </PgButtonGroup>
         <PgButtonGroup size="small">
@@ -581,7 +561,7 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
         <PgButtonGroup size="small">
           <PgIconButton title={gettext('Help')} icon={<HelpIcon />} onClick={onHelpClick} />
         </PgButtonGroup>
-      </Box>
+      </StyledBox>
       <PgMenu
         anchorRef={saveAsMenuRef}
         open={openMenuName=='menu-saveas'}
@@ -596,25 +576,25 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
         onClose={onMenuClose}
         label={gettext('Edit Menu')}
       >
-        <PgMenuItem shortcut={FIXED_PREF.find}
+        <PgMenuItem shortcut={queryToolPref.find}
           onClick={()=>{eventBus.fireEvent(QUERY_TOOL_EVENTS.EDITOR_FIND_REPLACE, false);}}>{gettext('Find')}</PgMenuItem>
-        <PgMenuItem shortcut={FIXED_PREF.replace}
+        <PgMenuItem shortcut={queryToolPref.replace}
           onClick={()=>{eventBus.fireEvent(QUERY_TOOL_EVENTS.EDITOR_FIND_REPLACE, true);}}>{gettext('Replace')}</PgMenuItem>
-        <PgMenuItem shortcut={FIXED_PREF.gotolinecol}
-          onClick={()=>{eventBus.fireEvent(QUERY_TOOL_EVENTS.EDITOR_EXEC_CMD, 'gotoLineCol');}}>{gettext('Go to Line/Column')}</PgMenuItem>
+        <PgMenuItem shortcut={queryToolPref.gotolinecol}
+          onClick={()=>{executeCmd('gotoLineCol');}}>{gettext('Go to Line/Column')}</PgMenuItem>
         <PgMenuDivider />
-        <PgMenuItem shortcut={FIXED_PREF.indent}
-          onClick={()=>{eventBus.fireEvent(QUERY_TOOL_EVENTS.EDITOR_EXEC_CMD, 'indentMore');}}>{gettext('Indent Selection')}</PgMenuItem>
-        <PgMenuItem shortcut={FIXED_PREF.unindent}
-          onClick={()=>{eventBus.fireEvent(QUERY_TOOL_EVENTS.EDITOR_EXEC_CMD, 'indentLess');}}>{gettext('Unindent Selection')}</PgMenuItem>
-        <PgMenuItem shortcut={FIXED_PREF.comment}
-          onClick={()=>{eventBus.fireEvent(QUERY_TOOL_EVENTS.EDITOR_EXEC_CMD, 'toggleComment');}}>{gettext('Toggle Comment')}</PgMenuItem>
+        <PgMenuItem shortcut={queryToolPref.indent}
+          onClick={()=>{executeCmd('indentMore');}}>{gettext('Indent Selection')}</PgMenuItem>
+        <PgMenuItem shortcut={queryToolPref.unindent}
+          onClick={()=>{executeCmd('indentLess');}}>{gettext('Unindent Selection')}</PgMenuItem>
+        <PgMenuItem shortcut={queryToolPref.comment}
+          onClick={()=>{executeCmd('toggleComment');}}>{gettext('Toggle Comment')}</PgMenuItem>
         <PgMenuItem shortcut={queryToolPref.toggle_case}
           onClick={toggleCase}>{gettext('Toggle Case Of Selected Text')}</PgMenuItem>
         <PgMenuItem shortcut={queryToolPref.clear_query}
           onClick={clearQuery}>{gettext('Clear Query')}</PgMenuItem>
         <PgMenuDivider />
-        <PgMenuItem shortcut={FIXED_PREF.format_sql}onClick={formatSQL}>{gettext('Format SQL')}</PgMenuItem>
+        <PgMenuItem shortcut={queryToolPref.format_sql} onClick={formatSQL}>{gettext('Format SQL')}</PgMenuItem>
       </PgMenu>
       <PgMenu
         anchorRef={filterMenuRef}
@@ -665,6 +645,7 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
         label={gettext('Macros Menu')}
       >
         <PgMenuItem onClick={onManageMacros}>{gettext('Manage macros')}</PgMenuItem>
+        <PgMenuItem onClick={onAddToMacros}>{gettext('Add to macros')}</PgMenuItem>
         <PgMenuDivider />
         {queryToolCtx.params?.macros?.map((m)=>{
           return (
@@ -680,7 +661,7 @@ export function MainToolBar({containerRef, onFilterClick, onManageMacros}) {
           );
         })}
       </PgMenu>
-    </>
+    </>)
   );
 }
 
@@ -688,4 +669,5 @@ MainToolBar.propTypes = {
   containerRef: CustomPropTypes.ref,
   onFilterClick: PropTypes.func,
   onManageMacros: PropTypes.func,
+  onAddToMacros: PropTypes.func
 };

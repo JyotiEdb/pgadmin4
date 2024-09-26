@@ -56,21 +56,18 @@ define('pgadmin.browser', [
       // calc method logic
       calc: (passed_width) => {
         let iw = window.innerWidth;
-        if(iw > passed_width){
+        if(iw > passed_width)
           return passed_width;
-        }else{
-          if (iw > pgAdmin.Browser.stdW.lg)
-            return pgAdmin.Browser.stdW.lg;
-          else if (iw > pgAdmin.Browser.stdW.md)
-            return pgAdmin.Browser.stdW.md;
-          else if (iw > pgAdmin.Browser.stdW.sm)
-            return pgAdmin.Browser.stdW.sm;
-          else
-            // if avilable screen resolution is still
-            // less then return the width value as it
-            return iw;
-        }
-
+        else if (iw > pgAdmin.Browser.stdW.lg)
+          return pgAdmin.Browser.stdW.lg;
+        else if (iw > pgAdmin.Browser.stdW.md)
+          return pgAdmin.Browser.stdW.md;
+        else if (iw > pgAdmin.Browser.stdW.sm)
+          return pgAdmin.Browser.stdW.sm;
+        else
+          // if avilable screen resolution is still
+          // less then return the width value as it
+          return iw;
       },
     },
     stdH: {
@@ -83,18 +80,16 @@ define('pgadmin.browser', [
       calc: (passed_height) => {
         // We are excluding sm as it is too small for dialog
         let ih = window.innerHeight;
-        if (ih > passed_height){
+        if (ih > passed_height)
           return passed_height;
-        } else {
-          if (ih > pgAdmin.Browser.stdH.lg)
-            return pgAdmin.Browser.stdH.lg;
-          else if (ih > pgAdmin.Browser.stdH.md)
-            return pgAdmin.Browser.stdH.md;
-          else
-            // if avilable screen resolution is still
-            // less then return the height value as it
-            return ih;
-        }
+        else if (ih > pgAdmin.Browser.stdH.lg)
+          return pgAdmin.Browser.stdH.lg;
+        else if (ih > pgAdmin.Browser.stdH.md)
+          return pgAdmin.Browser.stdH.md;
+        else
+          // if avilable screen resolution is still
+          // less then return the height value as it
+          return ih;
       },
     },
     // Default panels
@@ -196,22 +191,11 @@ define('pgadmin.browser', [
             if(categoryMenuOptions?.above) {
               menuItemList.push(MainMenuFactory.getSeparator(label, priority));
             }
-            if(!allMenuItemsDisabled && skipDisabled) {
+            if((!allMenuItemsDisabled && skipDisabled) ||  !skipDisabled) {
               let _menuItem = MainMenuFactory.createMenuItem({
                 name: c,
                 label: label,
                 module: c,
-                category: c,
-                menu_items: category[c],
-                priority: priority
-              });
-
-              menuItemList.push(_menuItem);
-            } else if(!skipDisabled){
-              let _menuItem = MainMenuFactory.createMenuItem({
-                name: c,
-                label: label,
-                module:c,
                 category: c,
                 menu_items: category[c],
                 priority: priority
@@ -228,9 +212,7 @@ define('pgadmin.browser', [
             });
 
             category[c].forEach((m)=> {
-              if(!skipDisabled) {
-                menuItemList.push(m);
-              } else if(skipDisabled && !m.isDisabled){
+              if(!skipDisabled || (skipDisabled && !m.isDisabled)) {
                 menuItemList.push(m);
               }
             });
@@ -503,7 +485,7 @@ define('pgadmin.browser', [
                 url: _m.url || '#',
                 target: _m.target,
                 icon: _m.icon,
-                enable: enable ? enable : true,
+                enable: enable || true,
                 node: _m.node,
                 checked: _m.checked,
                 below: _m.below,
@@ -666,10 +648,8 @@ define('pgadmin.browser', [
                     if (d._type === 'column') {
                       if (pgAdmin.numeric_comparator(d._id, _data._id) == 1)
                         return true;
-                    } else {
-                      if (pgAdmin.natural_sort(d._label, _data._label) == 1)
-                        return true;
-                    }
+                    } else if (pgAdmin.natural_sort(d._label, _data._label) == 1)
+                      return true;
                     s++;
                   }
                   //when the current element is greater than the end element
@@ -693,10 +673,8 @@ define('pgadmin.browser', [
                     if (d._type === 'column') {
                       if (pgAdmin.numeric_comparator(d._id, _data._id) != -1)
                         return true;
-                    } else {
-                      if (pgAdmin.natural_sort(d._label, _data._label) != -1)
-                        return true;
-                    }
+                    } else if (pgAdmin.natural_sort(d._label, _data._label) != -1)
+                      return true;
                     i = items[e];
                     d = __ctx.t.itemData(i);
                     let result;
@@ -767,16 +745,14 @@ define('pgadmin.browser', [
                       ) {
                         ___ctx.t.open(___ctx.i);
                         ___ctx.t.select(_i);
-                      } else {
-                        if (_parent_data) {
-                          // Unload the parent node so that we'll get
-                          // latest data when we try to expand it
-                          ___ctx.t.unload(___ctx.i).then(
-                            () => {
-                              ___ctx.t.open(___ctx.i);
-                            }
-                          );
-                        }
+                      } else if (_parent_data) {
+                        // Unload the parent node so that we'll get
+                        // latest data when we try to expand it
+                        ___ctx.t.unload(___ctx.i).then(
+                          () => {
+                            ___ctx.t.open(___ctx.i);
+                          }
+                        );
                       }
                       if (typeof(___ctx?.o?.success) == 'function') {
                         ___ctx.o.success.apply(___ctx.t, [_i, _data]);
@@ -944,7 +920,7 @@ define('pgadmin.browser', [
 
                     this.success = function() {
                       addItemNode();
-                    }.bind(this);
+                    };
                     // We can refresh the collection node, but - let's not bother about
                     // it right now.
                     this.notFound = errorOut;
@@ -985,7 +961,7 @@ define('pgadmin.browser', [
 
                     this.success = function() {
                       addItemNode();
-                    }.bind(this);
+                    };
                     // We can refresh the collection node, but - let's not bother about
                     // it right now.
                     this.notFound = errorOut;
@@ -1045,7 +1021,7 @@ define('pgadmin.browser', [
             this.load = true;
             this.success = function() {
               addItemNode();
-            }.bind(this);
+            };
 
             if (_d._type == this.old._type) {
               // We were already searching the old object under the parent.
@@ -1138,7 +1114,7 @@ define('pgadmin.browser', [
               this.t.openPath(this.i);
               this.t.select(this.i);
               if (
-                _ctx.o && _ctx.o.success && typeof(_ctx.o.success) == 'function'
+                _ctx.o?.success && typeof(_ctx.o?.success) == 'function'
               ) {
                 _ctx.o.success.apply(_ctx.t, [_ctx.i, _new]);
               }
@@ -1154,10 +1130,8 @@ define('pgadmin.browser', [
                     if (d._type === 'column') {
                       if (pgAdmin.numeric_comparator(d._id, _new._id) == 1)
                         return true;
-                    } else {
-                      if (pgAdmin.natural_sort(d._label, _new._label) == 1)
-                        return true;
-                    }
+                    } else if (pgAdmin.natural_sort(d._label, _new._label) == 1)
+                      return true;
                     s++;
                   }
                   if (e != items.length - 1) {
@@ -1174,10 +1148,8 @@ define('pgadmin.browser', [
                     if (d._type === 'column') {
                       if (pgAdmin.numeric_comparator(d._id, _new._id) != -1)
                         return true;
-                    } else {
-                      if (pgAdmin.natural_sort(d._label, _new._label) != -1)
-                        return true;
-                    }
+                    } else if (pgAdmin.natural_sort(d._label, _new._label) != -1)
+                      return true;
                     i = items[e];
                     d = __ctx.t.itemData(i);
                     let result;
@@ -1371,7 +1343,7 @@ define('pgadmin.browser', [
             ctx.b._refreshNode(ctx, ctx.branch);
           },
           error: function() {
-            let fail = (_opts.o && _opts.o.fail) || _opts.fail;
+            let fail = _opts.o?.fail || _opts?.fail;
 
             if (typeof(fail) == 'function') {
               fail();
@@ -1451,7 +1423,7 @@ define('pgadmin.browser', [
             });
           }
         });
-      }.bind(this);
+      };
 
       if (n?.collection_node) {
         let p = ctx.i = this.tree.parent(_i),
@@ -1678,21 +1650,17 @@ define('pgadmin.browser', [
             );
           });
 
-          if (_callback) {
-            _callback();
-          }
+          _callback?.();
         });
       } else {
-        if (_callback) {
-          _callback();
-        }
+        _callback?.();
       }
     },
 
     _refreshNode: function(_ctx, _d) {
       let traverseNodes = function(__d) {
         let __ctx = this, idx = 0, ctx, d,
-          size = (__d.branch && __d.branch.length) || 0,
+          size = __d?.branch?.length || 0,
           findNode = function(i_findNode, d_findNode, ctx_findNode) {
             setTimeout(
               function() {
@@ -1716,13 +1684,13 @@ define('pgadmin.browser', [
             load: true,
           };
           ctx.success = function() {
-            this.b._refreshNode.call(this.b, this, this.d);
+            this.b._refreshNode(this, this.d);
           }.bind(ctx);
           findNode(__ctx.i, d, ctx);
         }
       }.bind(_ctx, _d);
 
-      if (!_d || !_d.open)
+      if (!_d?.open)
         return;
 
       if (!_ctx.t.isOpen(_ctx.i)) {
@@ -1760,6 +1728,7 @@ define('pgadmin.browser', [
       insert_pair_brackets: pgBrowser.utils.insertPairBrackets,
       brace_matching: pgBrowser.utils.braceMatching,
       indent_with_tabs: pgBrowser.utils.is_indent_with_tabs,
+      highlightSelectionMatches:pgBrowser.utils.highlightSelectionMatches
     },
   });
 

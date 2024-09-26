@@ -230,7 +230,7 @@ define('pgadmin.node.server', [
                 obj.generate_url(i, 'connect', d, true),
               ).then(({data: res})=> {
                 if (res.success == 1) {
-                  pgAdmin.Browser.notifier.success(res.info, null);
+                  pgAdmin.Browser.notifier.success(res.info);
                   d = t.itemData(i);
                   t.removeIcon(i);
                   d.connected = false;
@@ -713,7 +713,7 @@ define('pgadmin.node.server', [
 
             /* Call enable/disable menu function after database is connected.
              To make sure all the menus for database is in the right state */
-            pgBrowser.enable_disable_menus.apply(pgBrowser, [_item]);
+            pgBrowser.enable_disable_menus(_item);
 
             // We're not reconnecting
             if (!_wasConnected) {

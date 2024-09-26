@@ -11,36 +11,36 @@
 import { getNodePrivilegeRoleSchema } from '../../../pgadmin/browser/server_groups/servers/static/js/privilege.ui';
 import PackageSchema from '../../../pgadmin/browser/server_groups/servers/databases/schemas/packages/static/js/package.ui';
 import {genericBeforeEach, getCreateView, getEditView, getPropertiesView} from '../genericFunctions';
+import { initializeSchemaWithData } from './utils';
 
 describe('PackageSchema', ()=>{
 
-  let packageSchemaObj = new PackageSchema(
-    (privileges)=>getNodePrivilegeRoleSchema({}, {server: {user: {name: 'postgres'}}}, {}, privileges),
+  const createSchemaObject = () => new PackageSchema(
+    (privileges) => getNodePrivilegeRoleSchema(
+      {}, {server: {user: {name: 'postgres'}}}, {}, privileges
+    ),
     {
       schemas:() => [],
       node_info: {'schema': []}
     },
   );
+  let packageSchemaObj = createSchemaObject(); 
   let getInitData = ()=>Promise.resolve({});
-
-
-
-
 
   beforeEach(()=>{
     genericBeforeEach();
   });
 
   it('create', async ()=>{
-    await getCreateView(packageSchemaObj);
+    await getCreateView(createSchemaObject());
   });
 
   it('edit', async ()=>{
-    await getEditView(packageSchemaObj, getInitData);
+    await getEditView(createSchemaObject(), getInitData);
   });
 
   it('properties', async ()=>{
-    await getPropertiesView(packageSchemaObj, getInitData);
+    await getPropertiesView(createSchemaObject(), getInitData);
   });
 
   it('pkgheadsrc depChange', ()=>{
@@ -49,9 +49,9 @@ describe('PackageSchema', ()=>{
       pkgheadsrc: 'changed text'
     };
     packageSchemaObj.warningText = null;
-    packageSchemaObj._origData = {
-      oid: '123'
-    };
+
+    initializeSchemaWithData(packageSchemaObj, { oid: '123' });
+
     let actionObj = {
       oldState: {
         pkgheadsrc: 'original text'
@@ -69,9 +69,7 @@ describe('PackageSchema', ()=>{
       pkgheadsrc: 'changed text'
     };
     packageSchemaObj.warningText = null;
-    packageSchemaObj._origData = {
-      oid: '123'
-    };
+    initializeSchemaWithData(packageSchemaObj, { oid: '123' });
     let actionObj = {
       oldState: {
         pkgbodysrc: 'original text'

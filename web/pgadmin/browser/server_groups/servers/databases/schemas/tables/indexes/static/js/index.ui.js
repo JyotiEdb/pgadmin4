@@ -7,12 +7,13 @@
 //
 //////////////////////////////////////////////////////////////
 
-import gettext from 'sources/gettext';
-import BaseUISchema from 'sources/SchemaView/base_schema.ui';
-import DataGridViewWithHeaderForm from '../../../../../../../../../static/js/helpers/DataGridViewWithHeaderForm';
 import _ from 'lodash';
-import { isEmptyString } from 'sources/validators';
+
+import { DataGridFormHeader } from 'sources/SchemaView/DataGridView';
+import BaseUISchema from 'sources/SchemaView/base_schema.ui';
+import gettext from 'sources/gettext';
 import pgAdmin from 'sources/pgadmin';
+import { isEmptyString } from 'sources/validators';
 
 
 function inSchema(node_info) {
@@ -23,8 +24,9 @@ class IndexColHeaderSchema extends BaseUISchema {
   constructor(columns) {
     super({
       is_exp: true,
-      colname: undefined,
-      expression: undefined,
+      colname: '',
+      expression: '',
+      columns_updated_at: 0,
     });
 
     this.columns = columns;
@@ -32,6 +34,8 @@ class IndexColHeaderSchema extends BaseUISchema {
 
   changeColumnOptions(columns) {
     this.columns = columns;
+    if (this.state)
+      this.state.data = {...this.state.data, columns_updated_at: Date.now()};
   }
 
   addDisabled(state) {
@@ -50,14 +54,18 @@ class IndexColHeaderSchema extends BaseUISchema {
     return [{
       id: 'is_exp', label: gettext('Is expression'), type:'switch', editable: false,
     },{
-      id: 'colname', label: gettext('Column'), type: 'select', editable: false,
-      options: this.columns, deps: ['is_exp'],
-      optionsReloadBasis: this.columns?.map ? _.join(this.columns.map((c)=>c.label), ',') : null,
-      optionsLoaded: (res)=>this.columnOptions=res,
-      disabled: (state)=>state.is_exp, node: 'column',
+      id: 'colname', label: gettext('Column'), editable: false,
+      deps: ['is_exp', 'columns_updated_at'],
+      type: () => ({
+        type: 'select', options: this.columns,
+        optionsReloadBasis: this.columns?.map ?
+          _.join(this.columns.map((c)=>c.label), ',') : null,
+        optionsLoaded: (res) => this.columnOptions = res,
+      }),
+      disabled: (state) => state.is_exp, node: 'column',
     },{
-      id: 'expression', label: gettext('Expression'), editable: false, deps: ['is_exp'],
-      type: 'sql', disabled: (state)=>!state.is_exp,
+      id: 'expression', label: gettext('Expression'), editable: false,
+      deps: ['is_exp'], type: 'sql', disabled: (state)=>!state.is_exp,
     }];
   }
 }
@@ -90,10 +98,10 @@ class IndexColumnSchema extends BaseUISchema {
   }
 
   isEditable(state) {
-    let topObj = this._top;
+    let topObj = this.top;
     if(this.inSchemaWithModelCheck(state)) {
       return false;
-    } else if (topObj._sessData && topObj._sessData.amname === 'btree') {
+    } else if (topObj.sessData && topObj.sessData.amname === 'btree') {
       state.is_sort_nulls_applicable = true;
       return true;
     } else {
@@ -130,7 +138,7 @@ class IndexColumnSchema extends BaseUISchema {
     return [
       {
         id: 'is_exp', label: '', type:'', cell: '', editable: false, width: 20,
-        disableResizing: true,
+        enableResizing: false,
         controlProps: {
           formatter: {
             fromRaw: function (rawValue) {
@@ -155,7 +163,8 @@ class IndexColumnSchema extends BaseUISchema {
                   * to access method selected by user if not selected
                   * send btree related op_class options
                   */
-                let amname = obj._top?._sessData ? obj._top?._sessData.amname : obj._top?._origData.amname;
+                let amname = obj.top?.sessData.amname ||
+                  obj.top?.origData.amname;
 
                 if(_.isUndefined(amname))
                   return options;
@@ -182,7 +191,7 @@ class IndexColumnSchema extends BaseUISchema {
           {label: 'ASC', value: false},
           {label: 'DESC', value: true},
         ],
-        width: 110, disableResizing: true,
+        width: 110, enableResizing: false,
         controlProps: {
           allowClear: false,
         },
@@ -211,7 +220,7 @@ class IndexColumnSchema extends BaseUISchema {
           {label: 'FIRST', value: true},
           {label: 'LAST', value: false},
         ], controlProps: {allowClear: false},
-        width: 110, disableResizing: true,
+        width: 110, enableResizing: false,
         editable: function(state) {
           return obj.isEditable(state);
         },
@@ -243,7 +252,7 @@ export class WithSchema extends BaseUISchema {
     super({});
     this.node_info = node_info;
   }
-  
+
   get baseFields() {
     let withSchemaObj = this;
     return [
@@ -308,7 +317,7 @@ export class WithSchema extends BaseUISchema {
         depChange: (state, source) => {
           if (state.amname !== 'btree') {
             return {deduplicate_items:undefined};
-          } else if (state.amname === 'btree' && source[0] !== 'deduplicate_items' && 
+          } else if (state.amname === 'btree' && source[0] !== 'deduplicate_items' &&
             withSchemaObj.node_info.server.version >= 130000) {
             return {deduplicate_items: true};
           }
@@ -571,10 +580,12 @@ export default class IndexSchema extends BaseUISchema {
         group: gettext('Columns'), type: 'collection',
         mode: ['create', 'edit', 'properties'],
         editable: false, schema: this.indexColumnSchema,
-        headerSchema: this.indexHeaderSchema, headerVisible: (state)=>indexSchemaObj.isNew(state),
-        CustomControl: DataGridViewWithHeaderForm,
+        headerSchema: this.indexHeaderSchema,
+        headerFormVisible: (state)=>indexSchemaObj.isNew(state),
+        GridHeader: DataGridFormHeader,
         uniqueCol: ['colname'],
-        canAdd: false, canDelete: function(state) {
+        canAdd: (state)=>indexSchemaObj.isNew(state),
+        canDelete: function(state) {
           // We can't update columns of existing
           return indexSchemaObj.isNew(state);
         }, cell: ()=>({

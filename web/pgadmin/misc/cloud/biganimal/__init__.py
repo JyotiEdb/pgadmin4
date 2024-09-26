@@ -14,14 +14,13 @@ import json
 import pickle
 from flask_babel import gettext
 from flask import session, current_app
-from flask_security import login_required
-from werkzeug.datastructures import Headers
+from pgadmin.user_login_check import pga_login_required
 from pgadmin.utils import PgAdminModule
 from pgadmin.misc.cloud.utils import _create_server, CloudProcessDesc
 from pgadmin.misc.bgprocess.processes import BatchProcess
 from pgadmin.utils.ajax import make_json_response
 from config import root
-from pgadmin.utils.constants import MIMETYPE_APP_JSON
+from pgadmin.utils.constants import MIMETYPE_APP_JSON, TWO_PARAM_STRING
 
 MODULE_NAME = 'biganimal'
 
@@ -52,7 +51,7 @@ blueprint = BigAnimalModule(MODULE_NAME, __name__,
 
 @blueprint.route('/verification_ack/',
                  methods=['GET'], endpoint='verification_ack')
-@login_required
+@pga_login_required
 def biganimal_verification_ack():
     """Check the Verification is done or not."""
     biganimal_obj = pickle.loads(session['biganimal']['provider_obj'])
@@ -65,7 +64,7 @@ def biganimal_verification_ack():
 
 @blueprint.route('/verification/',
                  methods=['GET'], endpoint='verification')
-@login_required
+@pga_login_required
 def verification():
     """Verify Credentials."""
     biganimal = BigAnimalProvider()
@@ -78,7 +77,7 @@ def verification():
 
 @blueprint.route('/projects/',
                  methods=['GET'], endpoint='projects')
-@login_required
+@pga_login_required
 def biganimal_projects():
     """Get Providers."""
     biganimal_obj = pickle.loads(session['biganimal']['provider_obj'])
@@ -88,7 +87,7 @@ def biganimal_projects():
 
 @blueprint.route('/providers/<project_id>',
                  methods=['GET'], endpoint='providers')
-@login_required
+@pga_login_required
 def biganimal_providers(project_id):
     """Get Providers."""
     biganimal_obj = pickle.loads(session['biganimal']['provider_obj'])
@@ -99,7 +98,7 @@ def biganimal_providers(project_id):
 
 @blueprint.route('/regions/',
                  methods=['GET'], endpoint='regions')
-@login_required
+@pga_login_required
 def biganimal_regions():
     """Get Regions."""
     biganimal_obj = pickle.loads(session['biganimal']['provider_obj'])
@@ -110,7 +109,7 @@ def biganimal_regions():
 
 @blueprint.route('/db_types/',
                  methods=['GET'], endpoint='db_types')
-@login_required
+@pga_login_required
 def biganimal_db_types():
     """Get Database Types."""
     biganimal_obj = pickle.loads(session['biganimal']['provider_obj'])
@@ -120,7 +119,7 @@ def biganimal_db_types():
 
 @blueprint.route('/db_versions/<cluster_type>/<pg_type>',
                  methods=['GET'], endpoint='db_versions')
-@login_required
+@pga_login_required
 def biganimal_db_versions(cluster_type, pg_type):
     """Get Database Version."""
     biganimal_obj = pickle.loads(session['biganimal']['provider_obj'])
@@ -130,7 +129,7 @@ def biganimal_db_versions(cluster_type, pg_type):
 
 @blueprint.route('/instance_types/<region_id>/<provider_id>',
                  methods=['GET'], endpoint='instance_types')
-@login_required
+@pga_login_required
 def biganimal_instance_types(region_id, provider_id):
     """Get Instance Types."""
     if not region_id or not provider_id:
@@ -143,7 +142,7 @@ def biganimal_instance_types(region_id, provider_id):
 
 @blueprint.route('/volume_types/<region_id>/<provider_id>',
                  methods=['GET'], endpoint='volume_types')
-@login_required
+@pga_login_required
 def biganimal_volume_types(region_id, provider_id):
     """Get Volume Types."""
     if not region_id or not provider_id:
@@ -155,7 +154,7 @@ def biganimal_volume_types(region_id, provider_id):
 
 @blueprint.route('/volume_properties/<region_id>/<provider_id>/<volume_type>',
                  methods=['GET'], endpoint='volume_properties')
-@login_required
+@pga_login_required
 def biganimal_volume_properties(region_id, provider_id, volume_type):
     """Get Volume Properties."""
     if not region_id or not provider_id:
@@ -192,15 +191,15 @@ class BigAnimalProvider():
 
     def get_auth_provider(self):
         """Get Authentication Provider Relevant Information."""
-        provider_resp = requests.get("{0}/{1}".format(self.BASE_URL,
-                                                      'auth/provider'))
+        provider_resp = requests.get(TWO_PARAM_STRING.format(self.BASE_URL,
+                                                             'auth/provider'))
         if provider_resp.status_code == 200 and provider_resp.content:
             self.provider = json.loads(provider_resp.content)
 
     def get_device_code(self):
         """Get device code"""
-        _url = "{0}/{1}".format(self.provider['issuerUri'],
-                                'oauth/device/code')
+        _url = TWO_PARAM_STRING.format(self.provider['issuerUri'],
+                                       'oauth/device/code')
         _headers = {"content-type": "application/x-www-form-urlencoded"}
         _data = {
             'client_id': self.provider['clientId'],
@@ -217,7 +216,8 @@ class BigAnimalProvider():
 
     def polling_for_token(self):
         # Polling for the Token
-        _url = "{0}/{1}".format(self.provider['issuerUri'], 'oauth/token')
+        _url = TWO_PARAM_STRING.format(self.provider['issuerUri'],
+                                       'oauth/token')
         _headers = {"content-type": "application/x-www-form-urlencoded"}
         _data = {
             'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
@@ -245,7 +245,7 @@ class BigAnimalProvider():
         return False, None
 
     def exchange_token(self):
-        _url = "{0}/{1}".format(self.BASE_URL, 'auth/token')
+        _url = TWO_PARAM_STRING.format(self.BASE_URL, 'auth/token')
         _headers = {"content-type": "application/json",
                     "accept": "application/json"}
         _data = {'token': self.raw_access_token}
@@ -266,7 +266,7 @@ class BigAnimalProvider():
         There is no direct way to do this, so just checking the create cluster
         permission.
         """
-        _url = "{0}/{1}".format(
+        _url = TWO_PARAM_STRING.format(
             self.BASE_URL,
             'user-info')
         resp = requests.get(_url, headers=self._get_headers())

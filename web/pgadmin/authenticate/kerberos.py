@@ -18,7 +18,7 @@ from flask import request, Response, session,\
     current_app, render_template, flash, url_for
 from flask_security.views import _security
 from flask_security.utils import logout_user
-from flask_security import login_required
+from pgadmin.user_login_check import pga_login_required
 
 import config
 from pgadmin.model import User
@@ -27,11 +27,9 @@ from pgadmin.utils.constants import KERBEROS, MessageType
 from pgadmin.utils import PgAdminModule
 from pgadmin.utils.ajax import make_json_response, internal_server_error
 
-
 from pgadmin.authenticate.internal import BaseAuthentication
 from pgadmin.authenticate import get_auth_sources
 from pgadmin.utils.csrf import pgCSRFProtect
-
 
 try:
     import gssapi
@@ -97,7 +95,7 @@ def init_app(app):
     @blueprint.route("/update_ticket",
                      endpoint="update_ticket", methods=["GET"])
     @pgCSRFProtect.exempt
-    @login_required
+    @pga_login_required
     def kerberos_update_ticket():
         """
         Update the kerberos ticket.
@@ -127,7 +125,7 @@ def init_app(app):
     @blueprint.route("/validate_ticket",
                      endpoint="validate_ticket", methods=["GET"])
     @pgCSRFProtect.exempt
-    @login_required
+    @pga_login_required
     def kerberos_validate_ticket():
         """
         Return the kerberos ticket lifetime left after getting the

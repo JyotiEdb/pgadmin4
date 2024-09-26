@@ -6,8 +6,7 @@
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
-import { makeStyles } from '@material-ui/styles';
-import React, {useContext, useCallback, useEffect } from 'react';
+import React, {useContext, useCallback, useEffect, useMemo } from 'react';
 import { format } from 'sql-formatter';
 import { QueryToolContext, QueryToolEventsContext } from '../QueryToolComponent';
 import CodeMirror from '../../../../../../static/js/components/ReactCodeMirror';
@@ -17,19 +16,15 @@ import { LayoutDockerContext, LAYOUT_EVENTS } from '../../../../../../static/js/
 import ConfirmSaveContent from '../../../../../../static/js/Dialogs/ConfirmSaveContent';
 import gettext from 'sources/gettext';
 import { isMac } from '../../../../../../static/js/keyboard_shortcuts';
-import { checkTrojanSource } from '../../../../../../static/js/utils';
+import { checkTrojanSource, isShortcutValue, parseKeyEventValue, parseShortcutValue } from '../../../../../../static/js/utils';
 import { parseApiError } from '../../../../../../static/js/api_instance';
 import { usePgAdmin } from '../../../../../../static/js/BrowserComponent';
 import ConfirmPromotionContent from '../dialogs/ConfirmPromotionContent';
+import ConfirmExecuteQueryContent from '../dialogs/ConfirmExecuteQueryContent';
 import usePreferences from '../../../../../../preferences/static/js/store';
 import { getTitle } from '../../sqleditor_title';
+import PropTypes from 'prop-types';
 
-
-const useStyles = makeStyles(()=>({
-  sql: {
-    height: '100%',
-  }
-}));
 
 async function registerAutocomplete(editor, api, transId) {
   editor.registerAutocomplete((context, onAvailable)=>{
@@ -39,7 +34,8 @@ async function registerAutocomplete(editor, api, transId) {
       });
       const word = context.matchBefore(/\w*/);
       const fullSql = context.state.doc.toString();
-      api.post(url, JSON.stringify([fullSql, fullSql]))
+      const sqlTillCur = context.state.sliceDoc(0, context.state.selection.main.head);
+      api.post(url, JSON.stringify([fullSql, sqlTillCur]))
         .then((res) => {
           onAvailable();
           resolve({
@@ -54,14 +50,13 @@ async function registerAutocomplete(editor, api, transId) {
         })
         .catch((err) => {
           onAvailable();
-          reject(err);
+          reject(err instanceof Error ? err : Error(gettext('Something went wrong')));
         });
     });
   });
 }
 
-export default function Query() {
-  const classes = useStyles();
+export default function Query({onTextSelect, handleEndOfLineChange}) {
   const editor = React.useRef();
   const eventBus = useContext(QueryToolEventsContext);
   const queryToolCtx = useContext(QueryToolContext);
@@ -69,8 +64,8 @@ export default function Query() {
   const lastCursorPos = React.useRef();
   const pgAdmin = usePgAdmin();
   const preferencesStore = usePreferences();
-
-  const highlightError = (cmObj, {errormsg: result, data})=>{
+  const queryToolPref = queryToolCtx.preferences.sqleditor;
+  const highlightError = (cmObj, {errormsg: result, data}, executeCursor)=>{
     let errorLineNo = 0,
       startMarker = 0,
       endMarker = 0,
@@ -80,9 +75,9 @@ export default function Query() {
     cmObj.removeErrorMark();
 
     // In case of selection we need to find the actual line no
-    if (cmObj.getSelection().length > 0) {
+    if (cmObj.getSelection().length > 0 || executeCursor) {
       selectedLineNo = cmObj.getCurrentLineNo();
-      origQueryLen = cmObj.line(selectedLineNo).length;
+      origQueryLen = cmObj.getLine(selectedLineNo).length;
     }
 
     // Fetch the LINE string using regex from the result
@@ -140,23 +135,26 @@ export default function Query() {
     }
   };
 
-  const triggerExecution = (explainObject, macroSQL)=>{
+  const triggerExecution = (explainObject, macroSQL, executeCursor=false)=>{
     if(queryToolCtx.params.is_query_tool) {
       let external = null;
       let query = editor.current?.getSelection();
-      if(!_.isUndefined(macroSQL)) {
+      if(!_.isEmpty(macroSQL)) {
         const regex = /\$SELECTION\$/gi;
         query =  macroSQL.replace(regex, query);
         external = true;
-      } else{
+      } else if(executeCursor) {
+        /* Execute query at cursor position */
+        query = query || editor.current?.getQueryAt(editor.current?.state.selection.head).value || '';
+      } else {
         /* Normal execution */
         query = query || editor.current?.getValue() || '';
       }
       if(query) {
-        eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, query, explainObject, external, null);
+        eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, query, explainObject, macroSQL, external, null, executeCursor);
       }
     } else {
-      eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, null, null);
+      eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, null, null, '');
     }
   };
 
@@ -166,10 +164,11 @@ export default function Query() {
     });
 
     eventBus.registerListener(QUERY_TOOL_EVENTS.TRIGGER_EXECUTION, triggerExecution);
+    eventBus.registerListener(QUERY_TOOL_EVENTS.EXECUTE_CURSOR_WARNING, checkUnderlineQueryCursorWarning);
 
-    eventBus.registerListener(QUERY_TOOL_EVENTS.HIGHLIGHT_ERROR, (result)=>{
+    eventBus.registerListener(QUERY_TOOL_EVENTS.HIGHLIGHT_ERROR, (result, executeCursor)=>{
       if(result) {
-        highlightError(editor.current, result);
+        highlightError(editor.current, result, executeCursor);
       } else {
         editor.current.removeErrorMark();
       }
@@ -190,6 +189,8 @@ export default function Query() {
         checkTrojanSource(res.data);
         editor.current.markClean();
         eventBus.fireEvent(QUERY_TOOL_EVENTS.LOAD_FILE_DONE, fileName, true);
+        const lineSep = res.data.includes('\r\n') ? 'crlf' : 'lf';
+        handleEndOfLineChange(lineSep);
       }).catch((err)=>{
         eventBus.fireEvent(QUERY_TOOL_EVENTS.LOAD_FILE_DONE, null, false);
         pgAdmin.Browser.notifier.error(parseApiError(err));
@@ -199,7 +200,7 @@ export default function Query() {
     eventBus.registerListener(QUERY_TOOL_EVENTS.SAVE_FILE, (fileName)=>{
       queryToolCtx.api.post(url_for('sqleditor.save_file'), {
         'file_name': decodeURI(fileName),
-        'file_content': editor.current.getValue(),
+        'file_content': editor.current.getValue(false, true),
       }).then(()=>{
         editor.current.markClean();
         eventBus.fireEvent(QUERY_TOOL_EVENTS.SAVE_FILE_DONE, fileName, true);
@@ -238,7 +239,7 @@ export default function Query() {
     eventBus.registerListener(QUERY_TOOL_EVENTS.EDITOR_FIND_REPLACE, (replace=false)=>{
       editor.current?.focus();
       let key = {
-        keyCode: 70, metaKey: false, ctrlKey: true, shiftKey: replace, altKey: false,
+        keyCode: 70, metaKey: false, ctrlKey: true, shiftKey: false, altKey: replace,
       };
       if(isMac()) {
         key.metaKey = true;
@@ -251,9 +252,6 @@ export default function Query() {
     eventBus.registerListener(QUERY_TOOL_EVENTS.EDITOR_SET_SQL, (value, focus=true)=>{
       focus && editor.current?.focus();
       editor.current?.setValue(value, !queryToolCtx.params.is_query_tool);
-      if (value == '' && editor.current) {
-        editor.current.state.autoCompleteList = [];
-      }
     });
     eventBus.registerListener(QUERY_TOOL_EVENTS.TRIGGER_QUERY_CHANGE, ()=>{
       change();
@@ -262,7 +260,7 @@ export default function Query() {
       let selection = true, sql = editor.current?.getSelection();
       let sqlEditorPref = preferencesStore.getPreferencesForModule('sqleditor');
       /* New library does not support capitalize casing
-        so if a user has set capitalize casing we will 
+        so if a user has set capitalize casing we will
         use preserve casing which is default for the library.
       */
       let formatPrefs = {
@@ -290,6 +288,12 @@ export default function Query() {
         editor.current.setValue(formattedSql);
       }
     });
+
+    eventBus.registerListener(QUERY_TOOL_EVENTS.CHANGE_EOL, (lineSep)=>{
+      editor.current?.setEOL(lineSep);
+      eventBus.fireEvent(QUERY_TOOL_EVENTS.QUERY_CHANGED, true);
+    });
+
     eventBus.registerListener(QUERY_TOOL_EVENTS.EDITOR_TOGGLE_CASE, ()=>{
       let selectedText = editor.current?.getSelection();
       if (!selectedText) return;
@@ -337,7 +341,46 @@ export default function Query() {
         />
       ));
     };
-    return eventBus.registerListener(QUERY_TOOL_EVENTS.WARN_SAVE_TEXT_CLOSE, warnSaveTextClose);
+
+    const formatSQL = ()=>{
+      let selection = true, sql = editor.current?.getSelection();
+      /* New library does not support capitalize casing
+        so if a user has set capitalize casing we will
+        use preserve casing which is default for the library.
+      */
+      let formatPrefs = {
+        language: 'postgresql',
+        keywordCase: queryToolPref.keyword_case === 'capitalize' ? 'preserve' : queryToolPref.keyword_case,
+        identifierCase: queryToolPref.identifier_case === 'capitalize' ? 'preserve' : queryToolPref.identifier_case,
+        dataTypeCase: queryToolPref.data_type_case,
+        functionCase: queryToolPref.function_case,
+        logicalOperatorNewline: queryToolPref.logical_operator_new_line,
+        expressionWidth: queryToolPref.expression_width,
+        linesBetweenQueries: queryToolPref.lines_between_queries,
+        tabWidth: queryToolPref.tab_size,
+        useTabs: !queryToolPref.use_spaces,
+        denseOperators: !queryToolPref.spaces_around_operators,
+        newlineBeforeSemicolon: queryToolPref.new_line_before_semicolon
+      };
+      if(sql == '') {
+        sql = editor.current.getValue();
+        selection = false;
+      }
+      let formattedSql = format(sql,formatPrefs);
+      if(selection) {
+        editor.current.replaceSelection(formattedSql, 'around');
+      } else {
+        editor.current.setValue(formattedSql);
+      }
+    };
+
+    const unregisterFormatSQL = eventBus.registerListener(QUERY_TOOL_EVENTS.TRIGGER_FORMAT_SQL, formatSQL);
+    const unregisterWarn = eventBus.registerListener(QUERY_TOOL_EVENTS.WARN_SAVE_TEXT_CLOSE, warnSaveTextClose);
+
+    return ()=>{
+      unregisterFormatSQL();
+      unregisterWarn();
+    };
   }, [queryToolCtx.preferences]);
 
   useEffect(()=>{
@@ -345,13 +388,17 @@ export default function Query() {
   }, [queryToolCtx.params.trans_id]);
 
   const cursorActivity = useCallback(_.debounce((cursor)=>{
+    if (queryToolCtx.preferences.sqleditor.underline_query_cursor){
+      let {from, to}=editor.current.getQueryAt(editor.current?.state.selection.head);
+      editor.current.setQueryHighlightMark(from,to);
+    }
+
     lastCursorPos.current = cursor;
     eventBus.fireEvent(QUERY_TOOL_EVENTS.CURSOR_ACTIVITY, [lastCursorPos.current.line, lastCursorPos.current.ch+1]);
   }, 100), []);
 
   const change = useCallback(()=>{
     eventBus.fireEvent(QUERY_TOOL_EVENTS.QUERY_CHANGED, editor.current.isDirty());
-
     if(!queryToolCtx.params.is_query_tool && editor.current.isDirty()){
       if(queryToolCtx.preferences.sqleditor.view_edit_promotion_warning){
         checkViewEditDataPromotion();
@@ -395,6 +442,28 @@ export default function Query() {
     });
   };
 
+  const checkUnderlineQueryCursorWarning = () => {
+    let query = editor.current?.getSelection();
+    query = query || editor.current?.getQueryAt(editor.current?.state.selection.head).value || '';
+    query && queryToolCtx.modal.showModal(gettext('Execute query'), (closeModal) =>{
+      return (<ConfirmExecuteQueryContent
+        closeModal={closeModal}
+        text={query}
+        onContinue={(formData)=>{
+          preferencesStore.setPreference(formData);
+          eventBus.fireEvent(QUERY_TOOL_EVENTS.TRIGGER_EXECUTION, null, '', true);
+        }}
+        onClose={()=>{
+          closeModal?.();
+        }}
+      />);
+    }, {
+      onClose:(closeModal)=>{
+        closeModal?.();
+      }
+    });
+  };
+
   const promoteToQueryTool = () => {
     if(!queryToolCtx.params.is_query_tool){
       queryToolCtx.toggleQueryTool();
@@ -403,14 +472,57 @@ export default function Query() {
     }
   };
 
+  const shortcutOverrideKeys = useMemo(
+    ()=>{
+      // omit CM internal shortcuts
+      const queryToolPref = _.omit(queryToolCtx.preferences.sqleditor, ['indent', 'unindent', 'comment']);
+      const queryToolShortcuts = Object.values(queryToolPref)
+        .filter((p)=>isShortcutValue(p))
+        .map((p)=>parseShortcutValue(p));
+
+      return [{
+        any: (_v, e)=>{
+          const eventStr = parseKeyEventValue(e);
+          if(queryToolShortcuts.includes(eventStr)) {
+            if((isMac() && eventStr == 'meta+k') || eventStr == 'ctrl+k') {
+              eventBus.fireEvent(QUERY_TOOL_EVENTS.TRIGGER_FORMAT_SQL);
+            } else {
+              queryToolCtx.mainContainerRef?.current?.dispatchEvent(new KeyboardEvent('keydown', {
+                which: e.which,
+                keyCode: e.keyCode,
+                altKey: e.altKey,
+                shiftKey: e.shiftKey,
+                ctrlKey: e.ctrlKey,
+                metaKey: e.metaKey,
+              }));
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            return true;
+          }
+          return false;
+        },
+      }];
+    },
+    [queryToolCtx.preferences]
+  );
+
   return <CodeMirror
     currEditor={(obj)=>{
       editor.current=obj;
     }}
     value={''}
-    className={classes.sql}
     onCursorActivity={cursorActivity}
     onChange={change}
     autocomplete={true}
+    customKeyMap={shortcutOverrideKeys}
+    onTextSelect={onTextSelect}
+    disabled={queryToolCtx.editor_disabled}
   />;
 }
+
+
+Query.propTypes = {
+  onTextSelect: PropTypes.func,
+  handleEndOfLineChange: PropTypes.func
+};

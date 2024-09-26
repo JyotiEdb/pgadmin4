@@ -8,12 +8,12 @@
 //////////////////////////////////////////////////////////////
 
 import _ from 'lodash';
+import { styled } from '@mui/material/styles';
 import React, { useEffect } from 'react';
 import PgTable from 'sources/components/PgTable';
 import gettext from 'sources/gettext';
 import PropTypes from 'prop-types';
 import getApiInstance from 'sources/api_instance';
-import { makeStyles } from '@material-ui/core/styles';
 import { getURL } from '../../../static/utils/utils';
 import Loader from 'sources/components/Loader';
 import EmptyPanelMessage from '../../../../static/js/components/EmptyPanelMessage';
@@ -22,34 +22,15 @@ import withStandardTabInfo from '../../../../static/js/helpers/withStandardTabIn
 import { BROWSER_PANELS } from '../../../../browser/static/js/constants';
 import { usePgAdmin } from '../../../../static/js/BrowserComponent';
 
-const useStyles = makeStyles((theme) => ({
-  emptyPanel: {
+const Root = styled('div')(({theme}) => ({
+  height : '100%',
+  '& .Dependencies-emptyPanel': {
     minHeight: '100%',
     minWidth: '100%',
     background: theme.otherVars.emptySpaceBg,
     overflow: 'auto',
     padding: '8px',
     display: 'flex',
-  },
-  panelIcon: {
-    width: '80%',
-    margin: '0 auto',
-    marginTop: '25px !important',
-    position: 'relative',
-    textAlign: 'center',
-  },
-  panelMessage: {
-    marginLeft: '0.5rem',
-    fontSize: '0.875rem',
-  },
-  autoResizer: {
-    height: '100% !important',
-    width: '100% !important',
-    background: theme.palette.grey[400],
-    padding: '7.5px',
-    overflow: 'auto !important',
-    minHeight: '100%',
-    minWidth: '100%',
   },
 }));
 
@@ -59,7 +40,7 @@ function parseData(data, node) {
     if (element.icon == null || element.icon == '') {
       if (node) {
         element.icon = _.isFunction(node['node_image'])
-          ? node['node_image'].apply(node, [null, null])
+          ? node['node_image'](null, null)
           : node['node_image'] || 'icon-' + element.type;
       } else {
         element.icon = 'icon-' + element.type;
@@ -75,7 +56,7 @@ function parseData(data, node) {
 }
 
 function Dependencies({ nodeData, nodeItem, node, treeNodeInfo, isActive, isStale, setIsStale }) {
-  const classes = useStyles();
+
   const [tableData, setTableData] = React.useState([]);
   const [loaderText, setLoaderText] = React.useState('');
   const [msg, setMsg] = React.useState('');
@@ -83,26 +64,30 @@ function Dependencies({ nodeData, nodeItem, node, treeNodeInfo, isActive, isStal
 
   let columns = [
     {
-      Header: 'Type',
-      accessor: 'type',
-      sortable: true,
-      resizable: true,
-      disableGlobalFilter: false,
+      header: 'Type',
+      accessorKey: 'type',
+      enableSorting: true,
+      enableResizing: true,
+      enableFilters: true,
+      cell: (info)=>{
+        const type = info.getValue();
+        return pgAdmin.Browser.Nodes?.[type]?.label ?? type;
+      }
     },
     {
-      Header: 'Name',
-      accessor: 'name',
-      sortable: true,
-      resizable: true,
-      disableGlobalFilter: false,
+      header: 'Name',
+      accessorKey: 'name',
+      enableSorting: true,
+      enableResizing: true,
+      enableFilters: true,
     },
     {
-      Header: 'Restriction',
-      accessor: 'field',
-      sortable: true,
-      resizable: true,
-      disableGlobalFilter: false,
-      minWidth: 280,
+      header: 'Restriction',
+      accessorKey: 'field',
+      enableSorting: true,
+      enableResizing: true,
+      enableFilters: true,
+      minSize: 280,
     },
   ];
 
@@ -160,23 +145,22 @@ function Dependencies({ nodeData, nodeItem, node, treeNodeInfo, isActive, isStal
   }, [isActive, isStale]);
 
   return (
-    <>
+    (<Root>
       {tableData.length > 0 ? (
         <PgTable
-          className={classes.autoResizer}
           columns={columns}
           data={tableData}
           msg={msg}
           type={gettext('panel')}
         ></PgTable>
       ) : (
-        <div className={classes.emptyPanel}>
+        <div className='Dependencies-emptyPanel'>
           {loaderText ? (<Loader message={loaderText}/>) :
             <EmptyPanelMessage text={gettext(msg)}/>
           }
         </div>
       )}
-    </>
+    </Root>)
   );
 }
 

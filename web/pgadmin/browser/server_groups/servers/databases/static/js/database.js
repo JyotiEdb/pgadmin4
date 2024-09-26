@@ -66,7 +66,7 @@ define('pgadmin.node.database', [
       },
       width: '700px',
       Init: function() {
-        /* Avoid mulitple registration of menus */
+        /* Avoid multiple registration of menus */
         if (this.initialized)
           return;
 
@@ -380,7 +380,7 @@ define('pgadmin.node.database', [
           // If node_info is not present in current object then it might in its
           // parent in case if we used sub node control
           let node_info = args.node_info || args.handler.node_info;
-          return 'catalog' in node_info ? false : true;
+          return !('catalog' in node_info);
         }
         return true;
       },
@@ -462,7 +462,7 @@ define('pgadmin.node.database', [
               );
               /* Call enable/disable menu function after database is connected.
                To make sure all the menus for database is in the right state */
-              pgBrowser.enable_disable_menus.apply(pgBrowser, [_item]);
+              pgBrowser.enable_disable_menus(_item);
               pgBrowser.Nodes['database'].callbacks.selected(_item, _data);
 
               if (!_connected) {

@@ -37,16 +37,37 @@ EOF
     done
 fi
 
-if [ ! -f /var/lib/pgadmin/pgadmin4.db ]; then
+# Check whether the external configuration database exists if it is being used.
+external_config_db_exists="False"
+if [ -n "${PGADMIN_CONFIG_CONFIG_DATABASE_URI}" ]; then
+     external_config_db_exists=$(cd /pgadmin4/pgadmin/utils && /venv/bin/python3 -c "from check_external_config_db import check_external_config_db; val = check_external_config_db(${PGADMIN_CONFIG_CONFIG_DATABASE_URI}); print(val)")
+fi
+
+if [ ! -f /var/lib/pgadmin/pgadmin4.db ] && [ "${external_config_db_exists}" = "False" ]; then
     if [ -z "${PGADMIN_DEFAULT_EMAIL}" ] || { [ -z "${PGADMIN_DEFAULT_PASSWORD}" ] && [ -z "${PGADMIN_DEFAULT_PASSWORD_FILE}" ]; }; then
         echo 'You need to define the PGADMIN_DEFAULT_EMAIL and PGADMIN_DEFAULT_PASSWORD or PGADMIN_DEFAULT_PASSWORD_FILE environment variables.'
         exit 1
     fi
 
-    if ! echo "${PGADMIN_DEFAULT_EMAIL}" | grep -E "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$" > /dev/null; then
-        echo "'${PGADMIN_DEFAULT_EMAIL}' does not appear to be a valid email address. Please reset the PGADMIN_DEFAULT_EMAIL environment variable and try again."
-        exit 1
+    # Validate PGADMIN_DEFAULT_EMAIL
+    CHECK_EMAIL_DELIVERABILITY="False"
+    if [ -n "${PGADMIN_CONFIG_CHECK_EMAIL_DELIVERABILITY}" ]; then
+        CHECK_EMAIL_DELIVERABILITY=${PGADMIN_CONFIG_CHECK_EMAIL_DELIVERABILITY}
     fi
+    ALLOW_SPECIAL_EMAIL_DOMAINS="[]"
+    if [ -n "${PGADMIN_CONFIG_ALLOW_SPECIAL_EMAIL_DOMAINS}" ]; then
+        ALLOW_SPECIAL_EMAIL_DOMAINS=${PGADMIN_CONFIG_ALLOW_SPECIAL_EMAIL_DOMAINS}
+    fi
+     email_config="{'CHECK_EMAIL_DELIVERABILITY': ${CHECK_EMAIL_DELIVERABILITY}, 'ALLOW_SPECIAL_EMAIL_DOMAINS': ${ALLOW_SPECIAL_EMAIL_DOMAINS}}"
+#    email_config="{'CHECK_EMAIL_DELIVERABILITY': ${CHECK_EMAIL_DELIVERABILITY}}"
+    echo "email config is ${email_config}"
+     is_valid_email=$(cd /pgadmin4/pgadmin/utils && /venv/bin/python3 -c "from validation_utils import validate_email; val = validate_email('${PGADMIN_DEFAULT_EMAIL}', ${email_config}); print(val)")
+     if echo "${is_valid_email}" | grep "False" > /dev/null; then
+         echo "'${PGADMIN_DEFAULT_EMAIL}' does not appear to be a valid email address. Please reset the PGADMIN_DEFAULT_EMAIL environment variable and try again."
+         exit 1
+     fi
+    # Switch back to root directory for further process
+    cd /pgadmin4
 
     # Read secret contents
     if [ -n "${PGADMIN_DEFAULT_PASSWORD_FILE}" ]; then
@@ -64,6 +85,7 @@ if [ ! -f /var/lib/pgadmin/pgadmin4.db ]; then
     /venv/bin/python3 run_pgadmin.py
 
     export PGADMIN_SERVER_JSON_FILE="${PGADMIN_SERVER_JSON_FILE:-/pgadmin4/servers.json}"
+    export PGADMIN_PREFERENCES_JSON_FILE="${PGADMIN_PREFERENCES_JSON_FILE:-/pgadmin4/preferences.json}"
 
     # Pre-load any required servers
     if [ -f "${PGADMIN_SERVER_JSON_FILE}" ]; then
@@ -100,8 +122,18 @@ TIMEOUT=$(cd /pgadmin4 && /venv/bin/python3 -c 'import config; print(config.SESS
 # NOTE: currently pgadmin can run only with 1 worker due to sessions implementation
 # Using --threads to have multi-threaded single-process worker
 
-if [ -n "${PGADMIN_ENABLE_TLS}" ]; then
-    exec /venv/bin/gunicorn --limit-request-line "${GUNICORN_LIMIT_REQUEST_LINE:-8190}" --timeout "${TIMEOUT}" --bind "${PGADMIN_LISTEN_ADDRESS:-[::]}:${PGADMIN_LISTEN_PORT:-443}" -w 1 --threads "${GUNICORN_THREADS:-25}" --access-logfile "${GUNICORN_ACCESS_LOGFILE:--}" --keyfile /certs/server.key --certfile /certs/server.cert -c gunicorn_config.py run_pgadmin:app
+if [ -n "${PGADMIN_ENABLE_SOCK}" ]; then
+    BIND_ADDRESS="unix:/run/pgadmin/pgadmin.sock"
 else
-    exec /venv/bin/gunicorn --limit-request-line "${GUNICORN_LIMIT_REQUEST_LINE:-8190}" --timeout "${TIMEOUT}" --bind "${PGADMIN_LISTEN_ADDRESS:-[::]}:${PGADMIN_LISTEN_PORT:-80}" -w 1 --threads "${GUNICORN_THREADS:-25}" --access-logfile "${GUNICORN_ACCESS_LOGFILE:--}" -c gunicorn_config.py run_pgadmin:app
+    if [ -n "${PGADMIN_ENABLE_TLS}" ]; then
+        BIND_ADDRESS="${PGADMIN_LISTEN_ADDRESS:-[::]}:${PGADMIN_LISTEN_PORT:-443}"
+    else
+        BIND_ADDRESS="${PGADMIN_LISTEN_ADDRESS:-[::]}:${PGADMIN_LISTEN_PORT:-80}"
+    fi
+fi
+
+if [ -n "${PGADMIN_ENABLE_TLS}" ]; then
+    exec /venv/bin/gunicorn --limit-request-line "${GUNICORN_LIMIT_REQUEST_LINE:-8190}" --timeout "${TIMEOUT}" --bind "${BIND_ADDRESS}" -w 1 --threads "${GUNICORN_THREADS:-25}" --access-logfile "${GUNICORN_ACCESS_LOGFILE:--}" --keyfile /certs/server.key --certfile /certs/server.cert -c gunicorn_config.py run_pgadmin:app
+else
+    exec /venv/bin/gunicorn --limit-request-line "${GUNICORN_LIMIT_REQUEST_LINE:-8190}" --timeout "${TIMEOUT}" --bind "${BIND_ADDRESS}" -w 1 --threads "${GUNICORN_THREADS:-25}" --access-logfile "${GUNICORN_ACCESS_LOGFILE:--}" -c gunicorn_config.py run_pgadmin:app
 fi

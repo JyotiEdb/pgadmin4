@@ -69,11 +69,21 @@ def init_app(app):
                      methods=['GET', 'POST'])
     @pgCSRFProtect.exempt
     def oauth_logout():
+        logout_url = None
+        id_token = session['oauth2_token'].get('id_token')
+        if 'oauth2_logout_url' in session:
+            logout_url = session['oauth2_logout_url']
+
         if not current_user.is_authenticated:
             return redirect(get_safe_post_logout_redirect())
         for key in list(session.keys()):
             session.pop(key)
+
         logout_user()
+        if logout_url:
+            return redirect(logout_url.format(
+                redirect_uri=request.url_root,
+                id_token=id_token))
         return redirect(get_safe_post_logout_redirect())
 
     app.register_blueprint(blueprint)
@@ -136,8 +146,13 @@ class OAuth2Authentication(BaseAuthentication):
                 self.oauth2_current_client
             ]['OAUTH2_USERNAME_CLAIM']
         if username_claim is not None:
+            id_token = session['oauth2_token'].get('userinfo', {})
             if username_claim in profile:
                 username = profile[username_claim]
+                current_app.logger.debug('Found username claim in profile')
+            elif username_claim in id_token:
+                username = id_token[username_claim]
+                current_app.logger.debug('Found username claim in id_token')
             else:
                 error_msg = "The claim '%s' is required to login into " \
                     "pgAdmin. Please update your OAuth2 profile." % (
@@ -153,24 +168,24 @@ class OAuth2Authentication(BaseAuthentication):
                 current_app.logger.exception(error_msg)
                 return False, gettext(error_msg)
 
-        additinal_claims = None
+        additional_claims = None
         if 'OAUTH2_ADDITIONAL_CLAIMS' in self.oauth2_config[
                 self.oauth2_current_client]:
 
-            additinal_claims = self.oauth2_config[
+            additional_claims = self.oauth2_config[
                 self.oauth2_current_client
             ]['OAUTH2_ADDITIONAL_CLAIMS']
 
         # checking oauth provider userinfo response
         valid_profile, reason = self.__is_any_claim_valid(profile,
-                                                          additinal_claims)
+                                                          additional_claims)
         current_app.logger.debug(f"profile claims: {profile}")
         current_app.logger.debug(f"reason: {reason}")
 
         # checking oauth provider idtoken claims
         id_token_claims = session.get('oauth2_token', {}).get('userinfo',{})
         valid_idtoken, reason = self.__is_any_claim_valid(id_token_claims,
-                                                          additinal_claims)
+                                                          additional_claims)
         current_app.logger.debug(f"idtoken claims: {id_token_claims}")
         current_app.logger.debug(f"reason: {reason}")
 
@@ -180,7 +195,7 @@ class OAuth2Authentication(BaseAuthentication):
                 " Please contact your administrator."
             audit_msg = f"The authenticated user {username} is not" \
                 " authorized to access pgAdmin based on OAUTH2 config. " \
-                f"Reason: additional claim required {additinal_claims}, " \
+                f"Reason: additional claim required {additional_claims}, " \
                 f"profile claims {profile}, idtoken cliams {id_token_claims}."
             current_app.logger.warning(audit_msg)
             return False, return_msg
@@ -201,6 +216,11 @@ class OAuth2Authentication(BaseAuthentication):
             self.oauth2_current_client].authorize_access_token()
 
         session['pass_enc_key'] = session['oauth2_token']['access_token']
+
+        if 'OAUTH2_LOGOUT_URL' in self.oauth2_config[
+                self.oauth2_current_client]:
+            session['oauth2_logout_url'] = self.oauth2_config[
+                self.oauth2_current_client]['OAUTH2_LOGOUT_URL']
 
         resp = self.oauth2_clients[self.oauth2_current_client].get(
             self.oauth2_config[
@@ -260,6 +280,6 @@ class OAuth2Authentication(BaseAuthentication):
                 authorized_claims = [authorized_claims]
             if any(item in authorized_claims for item in claim):
                 reason = "Claim match found. Authorized access."
-                return (True, reason)
-        reason = f"No match was found."
-        return (False, reason)
+                return True, reason
+        reason = "No match was found."
+        return False, reason

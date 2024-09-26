@@ -8,41 +8,20 @@
 //////////////////////////////////////////////////////////////
 
 import React from 'react';
-import { ToggleButton, ToggleButtonGroup } from '@material-ui/lab';
-import CheckRoundedIcon from '@material-ui/icons/CheckRounded';
+import { ToggleButton, ToggleButtonGroup, TableBody, TableCell, TableHead, TableRow } from '@mui/material';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { DefaultButton, PrimaryButton } from '../../../../static/js/components/Buttons';
-import { makeStyles } from '@material-ui/core/styles';
 import PropTypes from 'prop-types';
 import { getAWSSummary } from './aws';
 import  {getAzureSummary} from './azure';
 import { getBigAnimalSummary } from './biganimal';
-import { commonTableStyles } from '../../../../static/js/Theme';
-import { Table, TableBody, TableCell, TableHead, TableRow } from '@material-ui/core';
-import clsx from 'clsx';
 import gettext from 'sources/gettext';
 import { getGoogleSummary } from './google';
 import { CLOUD_PROVIDERS_LABELS } from './cloud_constants';
-
-const useStyles = makeStyles(() =>
-  ({
-    toggleButtonGroup: {
-      height: '100px',
-      flexGrow: '1'
-    },
-    toggleButtonMargin:{
-      marginTop: '0px !important',
-      padding: '12px'
-    },
-    gcpiconpadding:{
-      paddingLeft: '1.5rem'
-    }
-
-  }),
-);
+import Table from '../../../../static/js/components/Table';
 
 
 export function ToggleButtons(props) {
-  const classes = useStyles();
 
   const handleCloudProvider = (event, provider) => {
     if (provider) props.setCloudProvider(provider);
@@ -53,12 +32,12 @@ export function ToggleButtons(props) {
       color="primary"
       value={props.cloudProvider}
       onChange={handleCloudProvider}
-      className={classes.toggleButtonGroup}
+      sx={{ height: '100px', flexGrow: '1'}}
       orientation="vertical"
       exclusive>
       {
         (props.options||[]).map((option)=>{
-          return (<ToggleButton value={option.value} key={option.label} aria-label={option.label} className={clsx(classes.toggleButtonMargin, option.label==gettext(CLOUD_PROVIDERS_LABELS.GOOGLE) ? classes.gcpiconpadding : null )} component={props.cloudProvider == option.value ? PrimaryButton : DefaultButton}>
+          return (<ToggleButton value={option.value} key={option.label} aria-label={option.label} sx={{marginTop: '0px !important',padding: '12px'}} className={( option.label==gettext(CLOUD_PROVIDERS_LABELS.GOOGLE) ? 'paddingLeft: 1.5rem' : null )} component={props.cloudProvider == option.value ? PrimaryButton : DefaultButton}>
             <CheckRoundedIcon style={{visibility: props.cloudProvider == option.value  ? 'visible': 'hidden'}}/>&nbsp;
             {option.icon}&nbsp;&nbsp;&nbsp;&nbsp;{option.label}
           </ToggleButton>);
@@ -75,7 +54,6 @@ ToggleButtons.propTypes = {
 
 
 export function FinalSummary(props) {
-  const tableClasses = commonTableStyles();
   let summary = [],
     summaryHeader = ['Cloud Details', 'Version and Instance Details', 'Storage Details', 'Database Details'];
 
@@ -104,7 +82,7 @@ export function FinalSummary(props) {
 
   return summary.map((item, index) => {
     return (
-      <Table key={summaryHeader[index]} className={clsx(tableClasses.table)}>
+      <Table key={summaryHeader[index]}>
         <TableHead>
           <TableRow>
             <TableCell colSpan={2}>{gettext(summaryHeader[index])}</TableCell>

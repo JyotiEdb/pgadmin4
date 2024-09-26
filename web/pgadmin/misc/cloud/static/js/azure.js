@@ -18,15 +18,6 @@ import getApiInstance from '../../../../static/js/api_instance';
 import { CloudWizardEventsContext } from './CloudWizard';
 import {MESSAGE_TYPE } from '../../../../static/js/components/FormComponents';
 import gettext from 'sources/gettext';
-import { makeStyles } from '@material-ui/core/styles';
-
-const useStyles = makeStyles(() =>
-  ({
-    formClass: {
-      overflow: 'auto',
-    }
-  }),
-);
 
 // Azure credentials
 export function AzureCredentials(props) {
@@ -34,7 +25,7 @@ export function AzureCredentials(props) {
 
   let _eventBus = React.useContext(CloudWizardEventsContext);
   React.useMemo(() => {
-    const azureCloudDBCredSchema = new AzureCredSchema({
+    const azureCloudDBCredSchema = new AzureCredSchema(_eventBus, {
       authenticateAzure:(auth_type, azure_tenant_id) => {
         let loading_icon_url = url_for(
           'static', { 'filename': 'img/loading.gif'}
@@ -61,7 +52,7 @@ export function AzureCredentials(props) {
           })
           .catch((error) => {
             _eventBus.fireEvent('SET_ERROR_MESSAGE_FOR_CLOUD_WIZARD',[MESSAGE_TYPE.ERROR, gettext(`Error while verifying Microsoft Azure: ${error}`)]);
-            reject(false);
+            reject(new Error(gettext(error)));
           });
         });
       },
@@ -81,12 +72,12 @@ export function AzureCredentials(props) {
               })
               .catch((error)=>{
                 clearInterval(interval);
-                reject(error);
+                reject(error instanceof Error ? error : Error(gettext('Something went wrong')));
               });
           }, 1000);
         });
       }
-    }, {}, _eventBus);
+    }, {});
     setCloudDBCredInstance(azureCloudDBCredSchema);
   }, [props.cloudProvider]);
 
@@ -111,7 +102,6 @@ AzureCredentials.propTypes = {
 // Azure Instance
 export function AzureInstanceDetails(props) {
   const [azureInstanceSchema, setAzureInstanceSchema] = React.useState();
-  const classes = useStyles();
 
   React.useMemo(() => {
     const AzureSchema = new AzureClusterSchema({
@@ -195,7 +185,6 @@ export function AzureInstanceDetails(props) {
     onDataChange={(isChanged, changedData) => {
       props.setAzureInstanceData(changedData);
     }}
-    formClassName={classes.formClass}
   />;
 }
 AzureInstanceDetails.propTypes = {
@@ -211,7 +200,6 @@ AzureInstanceDetails.propTypes = {
 // Azure Database Details
 export function AzureDatabaseDetails(props) {
   const [azureDBInstance, setAzureDBInstance] = React.useState();
-  const classes = useStyles();
 
   React.useMemo(() => {
     const azureDBSchema = new AzureDatabaseSchema({
@@ -235,7 +223,6 @@ export function AzureDatabaseDetails(props) {
     onDataChange={(isChanged, changedData) => {
       props.setAzureDatabaseData(changedData);
     }}
-    formClassName={classes.formClass}
   />;
 }
 AzureDatabaseDetails.propTypes = {
@@ -286,7 +273,7 @@ export function checkClusternameAvailbility(clusterName){
         resolve(res.data);
       }
     }).catch((error) => {
-      reject(gettext(`Error while checking server name availability with Microsoft Azure: ${error.response.data.errormsg}`));
+      reject(new Error(gettext(`Error while checking server name availability with Microsoft Azure: ${error.response.data.errormsg}`)));
     });
   });
 }

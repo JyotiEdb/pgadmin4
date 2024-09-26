@@ -99,7 +99,7 @@ export default class RoleReassign extends BaseUISchema{
         helpMessage: gettext('New owner of the affected objects'),
         deps: ['role_op'],
         disabled: (state)=>{
-          return state.role_op == 'drop'? true: false;
+          return state.role_op == 'drop';
         },
         depChange: (state) =>{
           if (state.role_op == 'drop'){
@@ -209,7 +209,7 @@ export function showRoleReassign() {
     });
 
   pgAdmin.Browser.Events.trigger('pgadmin:utility:show', item,
-    gettext(gettext(`Reassign/Drop Owned - ${data.label}`), treeNodeInfo.table.label),{
+    gettext(`Reassign/Drop Owned - ${data.label}`),{
       schema, extraData, urlBase, sqlHelpUrl, helpUrl, saveBtnName: gettext('Reassign/Drop'),
     }, pgAdmin.Browser.stdW.md
   );

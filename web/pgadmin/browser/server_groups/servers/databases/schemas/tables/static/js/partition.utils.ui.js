@@ -15,6 +15,7 @@ export class PartitionKeysSchema extends BaseUISchema {
   constructor(columns=[], getCollations=[], getOperatorClass=[]) {
     super({
       key_type: 'column',
+      columns_updated_at: 0,
     });
     this.columns = columns;
     this.columnsReloadBasis = false;
@@ -24,6 +25,8 @@ export class PartitionKeysSchema extends BaseUISchema {
 
   changeColumnOptions(columns) {
     this.columns = columns;
+    if (this.state)
+      this.state.data = {...this.state.data, columns_updated_at: Date.now()};
   }
 
   isEditable(state) {
@@ -40,9 +43,9 @@ export class PartitionKeysSchema extends BaseUISchema {
       },{
         label: gettext('Expression'), value: 'expression',
       }],
-    },{
+    }, {
       id: 'pt_column', label: gettext('Column'), type:'select',
-      deps: ['key_type', ['columns']],
+      deps: ['key_type', 'columns_updated_at'],
       depChange: (state, source)=>{
         if(state.key_type == 'expression' || source[0] == 'columns') {
           return {
@@ -50,9 +53,9 @@ export class PartitionKeysSchema extends BaseUISchema {
           };
         }
       },
-      cell: ()=>({
+      cell: () => ({
         cell: 'select',
-        optionsReloadBasis: _.join(obj.columns.map((c)=>c.label), ','),//obj.columnsReloadBasis,
+        optionsReloadBasis: _.join(obj.columns.map((c) => c.label), ','),
         options: obj.columns,
         controlProps: {
           allowClear: false,
@@ -113,7 +116,7 @@ export class PartitionKeysSchema extends BaseUISchema {
   }
 }
 export class PartitionsSchema extends BaseUISchema {
-  constructor(nodeInfo, getCollations, getOperatorClass, getAttachTables=()=>[], table_amname_list) {
+  constructor(nodeInfo, getCollations, getOperatorClass, table_amname_list, getAttachTables=()=>[]) {
     super({
       oid: undefined,
       is_attach: false,
@@ -156,7 +159,7 @@ export class PartitionsSchema extends BaseUISchema {
       mode: ['properties'],
     },{
       id: 'is_attach', label:gettext('Operation'), cell: 'select', type: 'select',
-      width: 120, disableResizing: true, options: [
+      width: 120, enableResizing: false, options: [
         {label: gettext('Attach'), value: true},
         {label: gettext('Create'), value: false},
       ], controlProps: {allowClear: false},
@@ -206,7 +209,7 @@ export class PartitionsSchema extends BaseUISchema {
         return {
           type: 'select', options: this.table_amname_list,
           controlProps: {
-            allowClear: obj.isNew(state) ? true : false,
+            allowClear: obj.isNew(state),
           }
         };
       }, min_version: 120000, disabled: state => {
@@ -225,7 +228,7 @@ export class PartitionsSchema extends BaseUISchema {
       },
     },{
       id: 'is_default', label: gettext('Default'), type: 'switch', cell:'switch',
-      width: 55, disableResizing: true, min_version: 110000,
+      width: 55, enableResizing: false, min_version: 110000,
       editable: function(state) {
         return (obj.top && (obj.top.sessData.partition_type == 'range' ||
             obj.top.sessData.partition_type == 'list') && obj.isNew(state)

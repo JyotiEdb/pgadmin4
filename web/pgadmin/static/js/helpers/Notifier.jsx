@@ -8,12 +8,12 @@
 //////////////////////////////////////////////////////////////
 
 import { SnackbarProvider, SnackbarContent } from 'notistack';
-import { makeStyles } from '@material-ui/core/styles';
-import {Box} from '@material-ui/core';
-import CloseIcon from '@material-ui/icons/CloseRounded';
+import { styled } from '@mui/material/styles';
+import {Box} from '@mui/material';
+import CloseIcon from '@mui/icons-material/CloseRounded';
 import { DefaultButton, PrimaryButton } from '../components/Buttons';
 import HTMLReactParser from 'html-react-parser';
-import CheckRoundedIcon from '@material-ui/icons/CheckRounded';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import PropTypes from 'prop-types';
 import React, { useEffect } from 'react';
 import { NotifierMessage, MESSAGE_TYPE } from '../components/FormComponents';
@@ -23,37 +23,38 @@ import _ from 'lodash';
 import { useModal } from './ModalProvider';
 import { parseApiError } from '../api_instance';
 
+
+const Root = styled('div')(({theme}) => ({
+  '& .Notifier-footer': {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    padding: '0.5rem',
+    ...theme.mixins.panelBorder.top,
+    '& .Notifier-margin': {
+      marginLeft: '0.25rem',
+    }
+  },
+}));
+
 const AUTO_HIDE_DURATION = 3000;  // In milliseconds
 
 export const FinalNotifyContent = React.forwardRef(({children}, ref) => {
-  return <SnackbarContent style= {{justifyContent:'end', maxWidth: '700px'}} ref={ref}>{children}</SnackbarContent>;
+  return <SnackbarContent style= {{ justifyContent: 'end', maxWidth: '700px' }} ref={ref}>{children}</SnackbarContent>;
 });
 FinalNotifyContent.displayName = 'FinalNotifyContent';
 FinalNotifyContent.propTypes = {
   children: CustomPropTypes.children,
 };
 
-const useModalStyles = makeStyles((theme)=>({
-  footer: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    padding: '0.5rem',
-    ...theme.mixins.panelBorder.top,
-  },
-  margin: {
-    marginLeft: '0.25rem',
-  },
-}));
 function AlertContent({text, confirm, okLabel=gettext('OK'), cancelLabel=gettext('Cancel'), onOkClick, onCancelClick}) {
-  const classes = useModalStyles();
   return (
     <Box display="flex" flexDirection="column" height="100%">
       <Box flexGrow="1" p={2}>{HTMLReactParser(text)}</Box>
-      <Box className={classes.footer}>
+      <Box className='Notifier-footer'>
         {confirm &&
           <DefaultButton startIcon={<CloseIcon />} onClick={onCancelClick} >{cancelLabel}</DefaultButton>
         }
-        <PrimaryButton className={classes.margin} startIcon={<CheckRoundedIcon />} onClick={onOkClick} autoFocus={true} >{okLabel}</PrimaryButton>
+        <PrimaryButton className='Notifier-margin' startIcon={<CheckRoundedIcon />} onClick={onOkClick} autoFocus={true} >{okLabel}</PrimaryButton>
       </Box>
     </Box>
   );
@@ -76,11 +77,11 @@ class SnackbarNotifier {
 
   notify(content, autoHideDuration) {
     if (content) {
-      let  options = {autoHideDuration, content:(key) => (
+      let options = {autoHideDuration, content:(key) => (
         <FinalNotifyContent>{React.cloneElement(content, {onClose:()=>{this.snackbarObj.closeSnackbar(key);}})}</FinalNotifyContent>
       )};
       options.content.displayName = 'content';
-      this.snackbarObj.enqueueSnackbar(null, options);
+      this.snackbarObj.enqueueSnackbar(options);
     }
   }
 
@@ -121,7 +122,10 @@ class Notifier {
 
   pgRespErrorNotify(error, prefixMsg='') {
     if (error.response?.status === 410) {
-      this.alert(gettext('Error: Object not found - %s.', error.response.statusText), parseApiError(error));
+      this.alert(
+        gettext('Error: Object not found - %s.', error.response.statusText),
+        parseApiError(error)
+      );
     } else {
       this.error(prefixMsg + ' ' + parseApiError(error));
     }
@@ -133,38 +137,36 @@ class Notifier {
     if(!error.response) {
       msg = parseApiError(error);
       promptmsg = gettext('Connection Lost');
-    } else {
-      if(error.response.headers['content-type'] == 'application/json') {
-        let resp = error.response.data;
-        if(resp.info == 'CRYPTKEY_MISSING') {
-          let pgBrowser = window.pgAdmin.Browser;
-          pgBrowser.set_master_password('', ()=> {
-            if(onJSONResult && typeof(onJSONResult) == 'function') {
-              onJSONResult('CRYPTKEY_SET');
-            }
-          }, ()=> {
-            if(onJSONResult && typeof(onJSONResult) == 'function') {
-              onJSONResult('CRYPTKEY_NOT_SET');
-            }
-          });
-          return;
-        } else if (resp.result != null && (!resp.errormsg || resp.errormsg == '') &&
-          onJSONResult && typeof(onJSONResult) == 'function') {
-          return onJSONResult(resp.result);
-        }
-        msg = _.escape(resp.result) || _.escape(resp.errormsg) || 'Unknown error';
-      } else {
-        if (type === 'error') {
-          this.alert('Error', promptmsg);
-        }
+    } else if(error.response.headers['content-type'] == 'application/json') {
+      let resp = error.response.data;
+      if(resp.info == 'CRYPTKEY_MISSING') {
+        let pgBrowser = window.pgAdmin.Browser;
+        pgBrowser.set_master_password('', ()=> {
+          if(onJSONResult && typeof(onJSONResult) == 'function') {
+            onJSONResult('CRYPTKEY_SET');
+          }
+        }, ()=> {
+          if(onJSONResult && typeof(onJSONResult) == 'function') {
+            onJSONResult('CRYPTKEY_NOT_SET');
+          }
+        });
         return;
+      } else if (resp.result != null && (!resp.errormsg || resp.errormsg == '') &&
+        onJSONResult && typeof(onJSONResult) == 'function') {
+        return onJSONResult(resp.result);
       }
+      msg = _.escape(resp.result) || _.escape(resp.errormsg) || 'Unknown error';
+    } else {
+      if (type === 'error') {
+        this.alert('Error', promptmsg);
+      }
+      return;
     }
     if(type == 'error-noalert' && onJSONResult && typeof(onJSONResult) == 'function') {
       return onJSONResult();
     }
     this.alert(promptmsg, msg.replace(new RegExp(/\r?\n/, 'g'), '<br />'));
-    onJSONResult('ALERT_CALLED');
+    onJSONResult?.('ALERT_CALLED');
   }
 
   alert(title, text, onOkClick, okLabel=gettext('OK')) {
@@ -173,10 +175,10 @@ class Notifier {
     this.modal.alert(title, text, onOkClick, okLabel);
   }
 
-  confirm(title, text, onOkClick, onCancelClick, okLabel=gettext('Yes'), cancelLabel=gettext('No')) {
+  confirm(title, text, onOkClick, onCancelClick, okLabel=gettext('Yes'), cancelLabel=gettext('No'), extras=null) {
     /* Use this if you want to use pgAdmin global notifier.
     Or else, if you want to use modal inside iframe only then use ModalProvider eg- query tool */
-    this.modal.confirm(title, text, onOkClick, onCancelClick, okLabel, cancelLabel);
+    this.modal.confirm(title, text, onOkClick, onCancelClick, okLabel, cancelLabel, extras);
   }
 
   showModal(title, content, modalOptions) {
@@ -188,8 +190,9 @@ export function NotifierProvider({ pgAdmin, pgWindow, getInstance, children, onR
   const modal = useModal();
 
   useEffect(()=>{
-    // if open in an iframe then use top pgAdmin
-    if(window.self != window.top) {
+    // if opened in an iframe then use top pgAdmin
+    // pgAdmin itself can open in iframe, skip this in that case.
+    if(window.self != window.top && pgWindow != window ) {
       pgAdmin.Browser.notifier = new Notifier(modal, pgWindow.pgAdmin.Browser.notifier.snackbar);
       onReady?.();
       getInstance?.(pgAdmin.Browser.notifier);
@@ -197,25 +200,29 @@ export function NotifierProvider({ pgAdmin, pgWindow, getInstance, children, onR
   }, []);
 
   // if open in a window, then create your own Snackbar
-  if(window.self == window.top) {
+  // if pgAdmin is opened inside an iframe then it also same as new window.
+  if(window.self == window.top || (window.self != window.top && pgWindow == window )) {
     return (
-      <SnackbarProvider
-        maxSnack={30}
-        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-        ref={(obj)=>{
-          pgAdmin.Browser.notifier = new Notifier(modal, new SnackbarNotifier(obj));
-          getInstance?.(pgAdmin.Browser.notifier);
-          onReady?.();
-        }}
-      >
-        {children}
-      </SnackbarProvider>
+      <Root>
+        <SnackbarProvider
+          maxSnack={30}
+          anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+          ref={(obj)=>{
+            pgAdmin.Browser.notifier = new Notifier(modal, new SnackbarNotifier(obj));
+            getInstance?.(pgAdmin.Browser.notifier);
+            onReady?.();
+          }}
+          disableWindowBlurListener={true}
+        >
+          {children}
+        </SnackbarProvider>
+      </Root>
     );
   }
   return (
-    <>
+    (<Root>
       {children}
-    </>
+    </Root>)
   );
 }
 

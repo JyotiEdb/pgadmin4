@@ -18,7 +18,6 @@ import { act, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 export function withBrowser(WrappedComp) {
-  // eslint-disable-next-line react/display-name
   return (props)=>{
     return <Theme>
       <PgAdminContext.Provider value={fakePgAdmin}>
@@ -95,6 +94,6 @@ export const addNewDatagridRow = async (user, ctrl)=>{
   await user.click(ctrl.container.querySelector('[data-test="add-row"] button'));
 };
 
-export let genericBeforeEach = ()=> {
+export const genericBeforeEach = ()=> {
   pgWindow.pgAdmin = pgAdmin;
 };

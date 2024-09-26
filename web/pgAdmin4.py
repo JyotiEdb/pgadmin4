@@ -15,8 +15,8 @@ import sys
 if sys.version_info <= (3, 9):
     import select
 
-if sys.version_info < (3, 4):
-    raise RuntimeError('This application must be run under Python 3.4 '
+if sys.version_info < (3, 8):
+    raise RuntimeError('This application must be run under Python 3.8 '
                        'or later.')
 import builtins
 import os
@@ -102,6 +102,16 @@ if not os.path.isfile(config.SQLITE_PATH):
 ##########################################################################
 app = create_app()
 app.config['sessions'] = dict()
+
+# We load the file here instead of evaluate config
+# as we don't know the path of this file in evaluate config
+# commit_hash file resides in the web directory
+try:
+    with open(os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                           'commit_hash')) as f:
+        config.COMMIT_HASH = f.readline().strip()
+except FileNotFoundError as _:
+    config.COMMIT_HASH = None
 
 if setup_db_required:
     setup.setup_db(app)

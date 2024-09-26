@@ -33,7 +33,7 @@ import config
 #
 ##########################################################################
 
-SCHEMA_VERSION = 39
+SCHEMA_VERSION = 40
 
 ##########################################################################
 #
@@ -49,6 +49,7 @@ db = SQLAlchemy(
 
 USER_ID = 'user.id'
 SERVER_ID = 'server.id'
+CASCADE_STR = "all, delete-orphan"
 
 # Define models
 roles_users = db.Table(
@@ -173,7 +174,7 @@ class Server(db.Model):
     discovery_id = db.Column(db.String(128), nullable=True)
     servers = db.relationship(
         'ServerGroup',
-        backref=db.backref('server', cascade="all, delete-orphan"),
+        backref=db.backref('server', cascade=CASCADE_STR),
         lazy='joined'
     )
     db_res = db.Column(db.Text(), nullable=True)
@@ -388,7 +389,7 @@ class SharedServer(db.Model):
     discovery_id = db.Column(db.String(128), nullable=True)
     servers = db.relationship(
         'ServerGroup',
-        backref=db.backref('sharedserver', cascade="all, delete-orphan"),
+        backref=db.backref('sharedserver', cascade=CASCADE_STR),
         lazy='joined'
     )
     db_res = db.Column(db.Text(), nullable=True)
@@ -433,11 +434,12 @@ class Macros(db.Model):
 class UserMacros(db.Model):
     """Define the macro for a particular user."""
     __tablename__ = 'user_macros'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     mid = db.Column(
-        db.Integer, db.ForeignKey('macros.id'), primary_key=True
+        db.Integer, db.ForeignKey('macros.id'), nullable=True
     )
     uid = db.Column(
-        db.Integer, db.ForeignKey(USER_ID), primary_key=True
+        db.Integer, db.ForeignKey(USER_ID)
     )
     name = db.Column(db.String(1024), nullable=False)
     sql = db.Column(db.Text(), nullable=False)
@@ -451,5 +453,5 @@ class UserMFA(db.Model):
     options = db.Column(db.Text(), nullable=True)
     user = db.relationship(
         'User',
-        backref=db.backref('user', cascade="all, delete-orphan")
+        backref=db.backref('user', cascade=CASCADE_STR)
     )

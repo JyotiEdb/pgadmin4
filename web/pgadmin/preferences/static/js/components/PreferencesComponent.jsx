@@ -8,25 +8,86 @@
 //////////////////////////////////////////////////////////////
 
 import gettext from 'sources/gettext';
+import { styled } from '@mui/material/styles';
 import _ from 'lodash';
 import url_for from 'sources/url_for';
 import React, { useEffect, useMemo } from 'react';
 import { FileType } from 'react-aspen';
-import { Box } from '@material-ui/core';
+import { Box } from '@mui/material';
 import PropTypes from 'prop-types';
-import { makeStyles } from '@material-ui/core/styles';
 import SchemaView from '../../../../static/js/SchemaView';
 import getApiInstance from '../../../../static/js/api_instance';
-import CloseSharpIcon from '@material-ui/icons/CloseSharp';
-import HelpIcon from '@material-ui/icons/HelpRounded';
-import SaveSharpIcon from '@material-ui/icons/SaveSharp';
-import clsx from 'clsx';
+import CloseSharpIcon from '@mui/icons-material/CloseSharp';
+import HelpIcon from '@mui/icons-material/HelpRounded';
+import SaveSharpIcon from '@mui/icons-material/SaveSharp';
+import SettingsBackupRestoreIcon from'@mui/icons-material/SettingsBackupRestore';
 import pgAdmin from 'sources/pgadmin';
 import { DefaultButton, PgIconButton, PrimaryButton } from '../../../../static/js/components/Buttons';
 import BaseUISchema from 'sources/SchemaView/base_schema.ui';
 import { getBinaryPathSchema } from '../../../../browser/server_groups/servers/static/js/binary_path.ui';
-import { getBrowserAccesskey } from '../../../../static/js/components/ShortcutTitle';
 import usePreferences from '../store';
+import { getBrowser } from '../../../../static/js/utils';
+
+
+const StyledBox = styled(Box)(({theme}) => ({
+  '& .PreferencesComponent-root': {
+    display: 'flex',
+    flexDirection: 'column',
+    flexGrow: 1,
+    height: '100%',
+    backgroundColor: theme.palette.background.default,
+    overflow: 'hidden',
+    '&$disabled': {
+      color: '#ddd',
+    },
+    '& .PreferencesComponent-body': {
+      borderColor: theme.otherVars.borderColor,
+      display: 'flex',
+      flexGrow: 1,
+      height: '100%',
+      minHeight: 0,
+      overflow: 'hidden',
+      '& .PreferencesComponent-treeContainer': {
+        flexBasis: '25%',
+        alignItems: 'flex-start',
+        paddingLeft: '5px',
+        minHeight: 0,
+        flexGrow: 1,
+        '& .PreferencesComponent-tree': {
+          height: '100%',
+          flexGrow: 1
+        },
+      },
+      '& .PreferencesComponent-preferencesContainer': {
+        flexBasis: '75%',
+        padding: '5px',
+        borderColor: theme.otherVars.borderColor + '!important',
+        borderLeft: '1px solid',
+        position: 'relative',
+        height: '100%',
+        paddingTop: '5px',
+        overflow: 'auto',
+        '& .PreferencesComponent-preferencesContainerBackground': {
+          backgroundColor: theme.palette.background.default,
+        }
+      },
+    },
+    '& .PreferencesComponent-footer': {
+      borderTop: `1px solid ${theme.otherVars.inputBorderColor} !important`,
+      padding: '0.5rem',
+      display: 'flex',
+      width: '100%',
+      background: theme.otherVars.headerBg,
+      '& .PreferencesComponent-actionBtn': {
+        alignItems: 'flex-start',
+      },
+      '& .PreferencesComponent-buttonMargin': {
+        marginLeft: '0.5em'
+      },
+    },
+  },
+}));
+
 
 class PreferencesSchema extends BaseUISchema {
   constructor(initValues = {}, schemaFields = []) {
@@ -41,8 +102,8 @@ class PreferencesSchema extends BaseUISchema {
     return 'id';
   }
 
-  setSelectedCategory(category) {
-    this.category = category;
+  categoryUpdated() {
+    this.state?.validate(this.sessData);
   }
 
   get baseFields() {
@@ -50,103 +111,51 @@ class PreferencesSchema extends BaseUISchema {
   }
 }
 
-const useStyles = makeStyles((theme) =>
-  ({
-    root: {
-      display: 'flex',
-      flexDirection: 'column',
-      flexGrow: 1,
-      height: '100%',
-      backgroundColor: theme.palette.background.default,
-      overflow: 'hidden',
-      '&$disabled': {
-        color: '#ddd',
-      }
-    },
-    body: {
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      minHeight: 0,
-    },
-    preferences: {
-      borderColor: theme.otherVars.borderColor,
-      display: 'flex',
-      flexGrow: 1,
-      height: '100%',
-      minHeight: 0,
-      overflow: 'hidden'
-
-    },
-    treeContainer: {
-      flexBasis: '25%',
-      alignItems: 'flex-start',
-      paddingLeft: '5px',
-      minHeight: 0,
-      flexGrow: 1
-    },
-    tree: {
-      height: '100%',
-      flexGrow: 1
-    },
-    preferencesContainer: {
-      flexBasis: '75%',
-      padding: '5px',
-      borderColor: theme.otherVars.borderColor + '!important',
-      borderLeft: '1px solid',
-      position: 'relative',
-      height: '100%',
-      paddingTop: '5px',
-      overflow: 'auto'
-    },
-    actionBtn: {
-      alignItems: 'flex-start',
-    },
-    buttonMargin: {
-      marginLeft: '0.5em'
-    },
-    footer: {
-      borderTop: `1px solid ${theme.otherVars.inputBorderColor} !important`,
-      padding: '0.5rem',
-      display: 'flex',
-      width: '100%',
-      background: theme.otherVars.headerBg,
-    },
-    customTreeClass: {
-      '& .react-checkbox-tree': {
-        height: '100% !important',
-        border: 'none !important',
-      },
-    },
-    preferencesTree: {
-      height: 'calc(100% - 50px)',
-      minHeight: 0
-    }
-  }),
-);
+async function reloadPgAdmin() {
+  let {name: browser} = getBrowser();
+  if(browser == 'Electron') {
+    await window.electronUI.log('test');
+    await window.electronUI.reloadApp();
+  } else {
+    location.reload();
+  }
+}
 
 
-function RightPanel({ schema, ...props }) {
+function RightPanel({ schema, refreshKey, ...props }) {
+  const schemaViewRef = React.useRef(null);
   let initData = () => new Promise((resolve, reject) => {
     try {
       resolve(props.initValues);
     } catch (error) {
-      reject(error);
+      reject(error instanceof Error ? error : Error(gettext('Something went wrong')));
     }
   });
+  useEffect(() => {
+    const timeID = setTimeout(() => {
+      const focusableElement = schemaViewRef.current?.querySelector(
+        'button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusableElement) focusableElement.focus();
+    }, 50);
+    return () => clearTimeout(timeID);
+  }, [refreshKey]);
 
   return (
-    <SchemaView
-      formType={'dialog'}
-      getInitData={initData}
-      viewHelperProps={{ mode: 'edit' }}
-      schema={schema}
-      showFooter={false}
-      isTabView={false}
-      onDataChange={(isChanged, changedData) => {
-        props.onDataChange(changedData);
-      }}
-    />
+    <div ref={schemaViewRef}>
+      <SchemaView
+        formType={'dialog'}
+        getInitData={initData}
+        viewHelperProps={{ mode: 'edit' }}
+        schema={schema}
+        showFooter={false}
+        isTabView={false}
+        formClassName='PreferencesComponent-preferencesContainerBackground'
+        onDataChange={(isChanged, changedData) => {
+          props.onDataChange(changedData);
+        }}
+      />
+    </div>
   );
 }
 
@@ -158,7 +167,8 @@ RightPanel.propTypes = {
 
 
 export default function PreferencesComponent({ ...props }) {
-  const classes = useStyles();
+
+  const [refreshKey, setRefreshKey] = React.useState(0);
   const [disableSave, setDisableSave] = React.useState(true);
   const prefSchema = React.useRef(new PreferencesSchema({}, []));
   const prefChangedData = React.useRef({});
@@ -185,7 +195,7 @@ export default function PreferencesComponent({ ...props }) {
           'id': id.toString(),
           'label': node.label,
           '_label': node.label,
-          'name': node.label,
+          'name': node.name,
           'icon': '',
           'inode': true,
           'type': 2,
@@ -229,12 +239,17 @@ export default function PreferencesComponent({ ...props }) {
       setPrefTreeData(preferencesTreeData);
       setInitValues(preferencesValues);
       // set Preferences schema
-      prefSchema.current = new PreferencesSchema(preferencesValues, preferencesData);
+      prefSchema.current = new PreferencesSchema(
+        preferencesValues, preferencesData,
+      );
     }).catch((err) => {
       pgAdmin.Browser.notifier.alert(err);
     });
   }, []);
-  function setPreferences(node, subNode, nodeData, preferencesValues, preferencesData) {
+
+  function setPreferences(
+    node, subNode, nodeData, preferencesValues, preferencesData
+  ) {
     let addBinaryPathNote = false;
     subNode.preferences.forEach((element) => {
       let note = '';
@@ -311,6 +326,7 @@ export default function PreferencesComponent({ ...props }) {
         } else {
           opt.selected = false;
         }
+        opt.preview_src = opt.preview_src && url_for('static', { filename: opt.preview_src });
       });
     }
   }
@@ -340,8 +356,6 @@ export default function PreferencesComponent({ ...props }) {
     // Check and add the note for the element.
     if (subNode.label == gettext('Nodes') && node.label == gettext('Browser')) {
       note = [gettext('This settings is to Show/Hide nodes in the object explorer.')].join('');
-    } if(nodeData.name == 'keyboard_shortcuts') {
-      note = gettext('The Accesskey here is %s.', getBrowserAccesskey().join(' + '));
     } else {
       note = [note].join('');
     }
@@ -351,9 +365,10 @@ export default function PreferencesComponent({ ...props }) {
       preferencesData.push(
         {
           id: _.uniqueId('note') + subNode.id,
-          type: 'note', text: note,
+          type: 'note',
+          text: note,
+          'parentId': nodeData['id'],
           visible: false,
-          'parentId': nodeData['id']
         },
       );
     }
@@ -367,28 +382,25 @@ export default function PreferencesComponent({ ...props }) {
   }
 
   useEffect(() => {
-    let initTreeTimeout = null;
     let firstElement = null;
     // Listen selected preferences tree node event and show the appropriate components in right panel.
     pgAdmin.Browser.Events.on('preferences:tree:selected', (event, item) => {
       if (item.type == FileType.File) {
-        prefSchema.current.setSelectedCategory(item._metadata.data.name);
         prefSchema.current.schemaFields.forEach((field) => {
-          field.visible = field.parentId === item._metadata.data.id && !field?.hidden ;
+          field.visible = field.parentId === item._metadata.data.id &&
+            !field?.hidden ;
+
           if(field.visible && _.isNull(firstElement)) {
             firstElement = field;
           }
-          field.tooltip = item._parent._metadata.data.name.toLowerCase() + ':' + item._metadata.data.name + ':' + field.name;
+
+          field.labelTooltip =
+            item._parent._metadata.data.name.toLowerCase() + ':' +
+            item._metadata.data.name + ':' + field.name;
         });
-        setLoadTree(crypto.getRandomValues(new Uint16Array(1)));
-        initTreeTimeout = setTimeout(() => {
-          prefTreeInit.current = true;
-          if(firstElement) {
-            //set focus on first element on right side panel.
-            document.getElementsByName(firstElement.id.toString())[0].focus();
-            firstElement = '';
-          }
-        }, 10);
+        prefSchema.current.categoryUpdated(item._metadata.data.id);
+        setLoadTree(Date.now());
+        setRefreshKey(Date.now());
       }
       else {
         selectChildNode(item, prefTreeInit);
@@ -402,10 +414,6 @@ export default function PreferencesComponent({ ...props }) {
 
     // Listen added preferences tree node event to expand the newly added node on tree load.
     pgAdmin.Browser.Events.on('preferences:tree:added', addPrefTreeNode);
-    /* Clear the initTreeTimeout timeout if unmounted */
-    return () => {
-      clearTimeout(initTreeTimeout);
-    };
   }, []);
 
   function addPrefTreeNode(event, item) {
@@ -508,7 +516,9 @@ export default function PreferencesComponent({ ...props }) {
   function savePreferences(data, initVal) {
     let _data = [];
     for (const [key, value] of Object.entries(data.current)) {
-      let _metadata = prefSchema.current.schemaFields.filter((el) => { return el.id == key; });
+      let _metadata = prefSchema.current.schemaFields.filter(
+        (el) => { return el.id == key; }
+      );
       if (_metadata.length > 0) {
         let val = getCollectionValue(_metadata, value, initVal);
         _data.push({
@@ -528,10 +538,6 @@ export default function PreferencesComponent({ ...props }) {
   }
 
   function checkRefreshRequired(pref, requires_refresh) {
-    if (pref.name == 'theme') {
-      requires_refresh = true;
-    }
-
     if (pref.name == 'user_language') {
       requires_refresh = true;
     }
@@ -546,7 +552,11 @@ export default function PreferencesComponent({ ...props }) {
       data: save_data,
     }).then(() => {
       let requiresTreeRefresh = save_data.some((s)=>{
-        return s.name=='show_system_objects'||s.name=='show_empty_coll_nodes'||s.name.startsWith('show_node_')||s.name=='hide_shared_server'||s.name=='show_user_defined_templates';
+        return (
+          s.name=='show_system_objects' || s.name=='show_empty_coll_nodes' ||
+          s.name.startsWith('show_node_') || s.name=='hide_shared_server' ||
+          s.name=='show_user_defined_templates'
+        );
       });
       let requires_refresh = false;
       for (const [key] of Object.entries(data.current)) {
@@ -557,13 +567,18 @@ export default function PreferencesComponent({ ...props }) {
       if (requiresTreeRefresh) {
         pgAdmin.Browser.notifier.confirm(
           gettext('Object explorer refresh required'),
-          gettext('An object explorer refresh is required. Do you wish to refresh it now?'),
+          gettext(
+            'An object explorer refresh is required. Do you wish to refresh it now?'
+          ),
           function () {
-            pgAdmin.Browser.tree.destroy({
-              success: function () {
+            pgAdmin.Browser.tree.destroy().then(
+              () => {
+                pgAdmin.Browser.Events.trigger(
+                  'pgadmin-browser:tree:destroyed', undefined, undefined
+                );
                 return true;
-              },
-            });
+              }
+            );
           },
           function () {
             return true;
@@ -579,7 +594,7 @@ export default function PreferencesComponent({ ...props }) {
           gettext('A page refresh is required to apply the theme. Do you wish to refresh the page now?'),
           function () {
             /* If user clicks Yes */
-            location.reload();
+            reloadPgAdmin();
             return true;
           },
           function () { props.closeModal();},
@@ -599,43 +614,125 @@ export default function PreferencesComponent({ ...props }) {
     window.open(url_for('help.static', { 'filename': 'preferences.html' }), 'pgadmin_help');
   };
 
-  return (
-    <Box height={'100%'}>
-      <Box className={classes.root}>
-        <Box className={clsx(classes.preferences)}>
-          <Box className={clsx(classes.treeContainer)} >
+  const reset = () => {
+    pgAdmin.Browser.notifier.confirm(
+      gettext('Reset all preferences'),
+      `${gettext('All preferences will be reset to their default values.')}<br><br>${gettext('Do you want to proceed?')}<br><br>
+       ${gettext('Note:')}<br> <ul style="padding-left:20px"><li style="list-style-type:disc">${gettext('The object explorer tree will be refreshed automatically to reflect the changes.')}</li>
+       <li style="list-style-type:disc">${gettext('If the application language changes, a reload of the application will be required. You can choose to reload later at your convenience.')}</li></ul>`,
+      function () {},
+      function () {},
+      '',
+      'Cancel',
+      function (closeModal) {
+        return [
+          {
+            type: 'default',
+            icon: <SaveSharpIcon />,
+            label: gettext('Save & Reload'),
+            onclick: () => {
+              resetPrefsToDefault(true);
+              closeModal();
+            }
+          }, {
+            type: 'primary',
+            icon: <SaveSharpIcon />,
+            label: gettext('Save & Reload Later'),
+            onclick: () => {
+              resetPrefsToDefault(false);
+              closeModal();
+            }
+          }
+        ];
+      }
+    );
+  };
 
-            <Box className={clsx(classes.tree)} id={'treeContainer'} tabIndex={0}>
+  const resetPrefsToDefault = (refresh = false) => {
+    api({
+      url: url_for('preferences.index'),
+      method: 'DELETE'
+    }).then(()=>{
+      if (refresh){
+        reloadPgAdmin();
+        return true;
+      }
+      preferencesStore.cache();
+      pgAdmin.Browser.tree.destroy().then(
+        () => {
+          pgAdmin.Browser.Events.trigger(
+            'pgadmin-browser:tree:destroyed', undefined, undefined
+          );
+          return true;
+        }
+      );
+      props.closeModal();
+    }).catch((err) => {
+      pgAdmin.Browser.notifier.alert(err.response.data);
+    });
+  };
+
+  return (
+    <StyledBox height={'100%'}>
+      <Box className='PreferencesComponent-root'>
+        <Box className='PreferencesComponent-body'>
+          <Box className='PreferencesComponent-treeContainer' >
+            <Box className='PreferencesComponent-tree' id={'treeContainer'} tabIndex={0}>
               {
-                useMemo(() => (prefTreeData && props.renderTree(prefTreeData)), [prefTreeData])
+                useMemo(
+                  () => (prefTreeData && props.renderTree(prefTreeData)),
+                  [prefTreeData]
+                )
               }
             </Box>
           </Box>
-          <Box className={clsx(classes.preferencesContainer)}>
+          <Box className='PreferencesComponent-preferencesContainer'>
             {
               prefSchema.current && loadTree > 0 &&
-                <RightPanel schema={prefSchema.current} initValues={initValues} onDataChange={(changedData) => {
-                  Object.keys(changedData).length > 0 ? setDisableSave(false) : setDisableSave(true);
-                  prefChangedData.current = changedData;
-                }}></RightPanel>
+                <RightPanel
+                  schema={prefSchema.current} initValues={initValues}
+                  refreshKey={refreshKey}
+                  onDataChange={(changedData) => {
+                    Object.keys(changedData).length > 0 ?
+                      setDisableSave(false) : setDisableSave(true);
+                    prefChangedData.current = changedData;
+                  }}
+                ></RightPanel>
             }
           </Box>
         </Box>
-        <Box className={classes.footer}>
+        <Box className='PreferencesComponent-footer'>
           <Box>
-            <PgIconButton data-test="dialog-help" onClick={onDialogHelp} icon={<HelpIcon />} title={gettext('Help for this dialog.')} />
+            <PgIconButton
+              data-test="dialog-help" onClick={onDialogHelp}
+              icon={<HelpIcon />} title={gettext('Help for this dialog.')}
+            />
           </Box>
-          <Box className={classes.actionBtn} marginLeft="auto">
-            <DefaultButton className={classes.buttonMargin} onClick={() => { props.closeModal();}} startIcon={<CloseSharpIcon onClick={() => { props.closeModal();}} />}>
+          <Box className='PreferencesComponent-actionBtn' marginLeft="auto">
+            <DefaultButton className='PreferencesComponent-buttonMargin'
+              onClick={reset} startIcon={<SettingsBackupRestoreIcon />}>
+              {gettext('Reset all preferences')}
+            </DefaultButton>
+            <DefaultButton className='PreferencesComponent-buttonMargin'
+              onClick={() => { props.closeModal();}}
+              startIcon={
+                <CloseSharpIcon onClick={() => { props.closeModal();}} />
+              }>
               {gettext('Cancel')}
             </DefaultButton>
-            <PrimaryButton className={classes.buttonMargin} startIcon={<SaveSharpIcon />} disabled={disableSave} onClick={() => { savePreferences(prefChangedData, initValues); }}>
+            <PrimaryButton
+              className='PreferencesComponent-buttonMargin'
+              startIcon={<SaveSharpIcon />}
+              disabled={disableSave}
+              onClick={() => {
+                savePreferences(prefChangedData, initValues);
+              }}>
               {gettext('Save')}
             </PrimaryButton>
           </Box>
         </Box>
       </Box >
-    </Box>
+    </StyledBox>
   );
 }
 

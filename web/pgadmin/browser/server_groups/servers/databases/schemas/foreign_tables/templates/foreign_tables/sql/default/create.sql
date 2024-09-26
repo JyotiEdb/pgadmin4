@@ -82,25 +82,26 @@ COMMENT ON COLUMN {{conn|qtIdent(data.basensp, data.name, c.name)}}
 {% for c in data.columns %}
 {% if c.description %}
 
-COMMENT ON COLUMN {{conn|qtIdent(data.schema, data.name, c.name)}}
+COMMENT ON COLUMN {{conn|qtIdent(data.basensp, data.name, c.name)}}
     IS {{c.description|qtLiteral(conn)}};
 {% endif %}
 {###  Add variables to column ###}
 {% if c.attoptions and c.attoptions|length > 0 %}
 
-ALTER TABLE IF EXISTS {{conn|qtIdent(data.schema, data.name)}}
+ALTER FOREIGN TABLE IF EXISTS {{conn|qtIdent(data.basensp, data.name)}}
     {{ VARIABLE.SET(conn, 'COLUMN', c.name, c.attoptions) }}
 
 {% endif %}
 {###  Alter column statistics value ###}
-{% if c.attstattarget is defined and c.attstattarget > -1 %}
-ALTER TABLE IF EXISTS {{conn|qtIdent(data.schema, data.name)}}
+{% if c.attstattarget is defined and c.attstattarget is not none and c.attstattarget > -1 %}
+ALTER FOREIGN TABLE IF EXISTS {{conn|qtIdent(data.basensp, data.name)}}
     ALTER COLUMN {{conn|qtTypeIdent(c.name)}} SET STATISTICS {{c.attstattarget}};
 
 {% endif %}
 {###  Alter column storage value ###}
 {% if c.attstorage is defined and c.attstorage != c.defaultstorage %}
-ALTER TABLE IF EXISTS {{conn|qtIdent(data.schema, data.name)}}
+
+ALTER FOREIGN TABLE IF EXISTS {{conn|qtIdent(data.basensp, data.name)}}
     ALTER COLUMN {{conn|qtTypeIdent(c.name)}} SET STORAGE {%if c.attstorage == 'p' %}
 PLAIN{% elif c.attstorage == 'm'%}MAIN{% elif c.attstorage == 'e'%}
 EXTERNAL{% elif c.attstorage == 'x'%}EXTENDED{% endif %};

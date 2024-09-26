@@ -9,7 +9,7 @@
 
 import _ from 'lodash';
 import React from 'react';
-import ReactDOM from 'react-dom';
+import ReactDOM from 'react-dom/client';
 
 import gettext from 'sources/gettext';
 import { sprintf } from 'sources/utils';
@@ -26,7 +26,7 @@ import DebuggerComponent from './components/DebuggerComponent';
 import Theme from '../../../../static/js/Theme';
 import { BROWSER_PANELS } from '../../../../browser/static/js/constants';
 import { NotifierProvider } from '../../../../static/js/helpers/Notifier';
-import usePreferences from '../../../../preferences/static/js/store';
+import usePreferences, { listenPreferenceBroadcast } from '../../../../preferences/static/js/store';
 import pgAdmin from 'sources/pgadmin';
 import { PgAdminContext } from '../../../../static/js/BrowserComponent';
 
@@ -92,7 +92,7 @@ export default class DebuggerModule {
         data: {
           object: 'procedure',
         },
-        enable: 'can_debug',
+        enable: 'canDebug',
       }, {
         name: 'procedure_indirect_debugger',
         node: 'procedure',
@@ -106,7 +106,7 @@ export default class DebuggerModule {
           object: 'procedure',
           debug_type: 'indirect',
         },
-        enable: 'can_debug',
+        enable: 'canDebug',
       }, {
         name: 'trigger_function_indirect_debugger',
         node: 'trigger_function',
@@ -120,7 +120,7 @@ export default class DebuggerModule {
           object: 'trigger_function',
           debug_type: 'indirect',
         },
-        enable: 'can_debug',
+        enable: 'canDebug',
       }, {
         name: 'trigger_indirect_debugger',
         node: 'trigger',
@@ -134,7 +134,7 @@ export default class DebuggerModule {
           object: 'trigger',
           debug_type: 'indirect',
         },
-        enable: 'can_debug',
+        enable: 'canDebug',
       }, {
         name: 'package_function_direct_debugger',
         node: 'edbfunc',
@@ -147,7 +147,7 @@ export default class DebuggerModule {
         data: {
           object: 'edbfunc',
         },
-        enable: 'can_debug',
+        enable: 'canDebug',
       }, {
         name: 'package_function_global_debugger',
         node: 'edbfunc',
@@ -161,7 +161,7 @@ export default class DebuggerModule {
           object: 'edbfunc',
           debug_type: 'indirect',
         },
-        enable: 'can_debug',
+        enable: 'canDebug',
       }, {
         name: 'package_procedure_direct_debugger',
         node: 'edbproc',
@@ -174,7 +174,7 @@ export default class DebuggerModule {
         data: {
           object: 'edbproc',
         },
-        enable: 'can_debug',
+        enable: 'canDebug',
       }, {
         name: 'package_procedure_global_debugger',
         node: 'edbproc',
@@ -188,35 +188,23 @@ export default class DebuggerModule {
           object: 'edbproc',
           debug_type: 'indirect',
         },
-        enable: 'can_debug',
+        enable: 'canDebug',
       }
     ]);
   }
 
   // It will check weather the function is actually debuggable or not with pre-required condition.
   canDebug(itemData, item, data) {
-    let t = this.pgBrowser.tree,
-      i = item,
-      d = itemData;
-    // To iterate over tree to check parent node
-    while (i) {
-      if ('catalog' == d._type) {
-        //Check if we are not child of catalog
-        return false;
-      }
-      i = t.hasParent(i) ? t.parent(i) : null;
-      d = i ? t.itemData(i) : null;
-    }
-
-    // Find the function is really available in database
     let tree = this.pgBrowser.tree,
-      info = tree.selected(),
-      d_ = info ? tree.itemData(info) : undefined;
+      d = itemData,
+      treeInfo = tree.getTreeNodeHierarchy(item);
 
-    if (!d_)
+    // Disable debugging for catalog functions
+    if ('catalog' in treeInfo)
       return false;
 
-    let treeInfo = tree.getTreeNodeHierarchy(info);
+    if (!d)
+      return false;
 
     // For indirect debugging user must be super user
     if (data?.debug_type == 'indirect' && !treeInfo.server.user.is_superuser)
@@ -231,14 +219,14 @@ export default class DebuggerModule {
       return false;
 
     // For trigger node, language will be undefined - we should allow indirect debugging for trigger node
-    if ((d_.language == undefined && d_._type == 'trigger') ||
-      (d_.language == undefined && d_._type == 'edbfunc') ||
-      (d_.language == undefined && d_._type == 'edbproc')) {
+    if ((d.language == undefined && d._type == 'trigger') ||
+      (d.language == undefined && d._type == 'edbfunc') ||
+      (d.language == undefined && d._type == 'edbproc')) {
       return true;
     }
 
     let returnValue = true;
-    if (d_.language != 'plpgsql' && d_.language != 'edbspl') {
+    if (d.language != 'plpgsql' && d.language != 'edbspl') {
       returnValue = false;
     }
 
@@ -281,7 +269,7 @@ export default class DebuggerModule {
   }
 
   getUrl(_d, newTreeInfo, trans_id) {
-    let baseUrl = undefined;
+    let baseUrl;
     if (_d._type == 'function' || _d._type == 'edbfunc') {
       baseUrl = url_for(
         'debugger.initialize_target_for_function', {
@@ -379,7 +367,7 @@ export default class DebuggerModule {
 
             let browser_preferences = usePreferences.getState().getPreferencesForModule('browser');
             let open_new_tab = browser_preferences.new_browser_tab_open;
-            const db_label = self.checkDbNameChange(data, dbNode, newTreeInfo, db_label);
+            const db_label = self.checkDbNameChange(data, dbNode, newTreeInfo);
             let label = getAppropriateLabel(newTreeInfo);
             pgAdmin.Browser.Events.trigger(
               'pgadmin:tool:show',
@@ -556,10 +544,8 @@ export default class DebuggerModule {
             pgAdmin.Browser.notifier.alert(gettext('Debugger Error'), error);
           }
         );
-      } else {
-        if (err.success == 0) {
-          pgAdmin.Browser.notifier.alert(gettext('Debugger Error'), err.errormsg);
-        }
+      } else if (err.success == 0) {
+        pgAdmin.Browser.notifier.alert(gettext('Debugger Error'), err.errormsg);
       }
     } catch (e) {
       console.warn(e.stack || e);
@@ -567,7 +553,7 @@ export default class DebuggerModule {
   }
 
   /* We should get the transaction id from the server during initialization here */
-  load(container, trans_id, debug_type, function_name_with_arguments, layout) {
+  async load(container, trans_id, debug_type, function_name_with_arguments, layout) {
     this.trans_id = trans_id;
     this.debug_type = debug_type;
     this.first_time_indirect_debug = false;
@@ -578,13 +564,14 @@ export default class DebuggerModule {
     this.is_polling_required = true; // Flag to stop unwanted ajax calls
     this.function_name_with_arguments = function_name_with_arguments;
     this.layout = layout;
-    this.preferences = usePreferences.getState().getPreferencesForModule('debugger');
 
     let selectedNodeInfo = pgWindow.pgAdmin.Browser.tree.getTreeNodeHierarchy(
       pgWindow.pgAdmin.Browser.tree.selected()
     );
+    await listenPreferenceBroadcast();
 
-    ReactDOM.render(
+    const root = ReactDOM.createRoot(container);
+    root.render(
       <Theme>
         <PgAdminContext.Provider value={pgAdmin}>
           <ModalProvider>
@@ -600,8 +587,7 @@ export default class DebuggerModule {
             />
           </ModalProvider>
         </PgAdminContext.Provider>
-      </Theme>,
-      container
+      </Theme>
     );
   }
 

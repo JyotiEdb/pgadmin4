@@ -16,6 +16,7 @@ import ipaddress
 def get_my_ip():
     """ Return the public IP of this host """
     http = urllib3.PoolManager()
+    IP_ADDRESS_STRING = '{}/{}'
     try:
         external_ip = http.request('GET', 'https://ident.me').data
     except Exception:
@@ -29,11 +30,11 @@ def get_my_ip():
 
     ip = ipaddress.ip_address(external_ip)
     if isinstance(ip, ipaddress.IPv4Address):
-        return '{}/{}'.format(external_ip, 32)
+        return IP_ADDRESS_STRING.format(external_ip, 32)
     elif isinstance(ip, ipaddress.IPv6Address):
-        return '{}/{}'.format(external_ip, 128)
+        return IP_ADDRESS_STRING.format(external_ip, 128)
 
-    return '{}/{}'.format(external_ip, 32)
+    return IP_ADDRESS_STRING.format(external_ip, 32)
 
 
 def get_random_id():

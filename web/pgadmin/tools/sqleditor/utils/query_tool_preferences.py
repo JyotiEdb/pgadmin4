@@ -13,9 +13,12 @@ from pgadmin.utils.constants import PREF_LABEL_DISPLAY,\
     PREF_LABEL_KEYBOARD_SHORTCUTS, PREF_LABEL_EXPLAIN, PREF_LABEL_OPTIONS,\
     PREF_LABEL_EDITOR, PREF_LABEL_CSV_TXT, PREF_LABEL_RESULTS_GRID,\
     PREF_LABEL_SQL_FORMATTING, PREF_LABEL_GRAPH_VISUALISER
-from pgadmin.utils import SHORTCUT_FIELDS as shortcut_fields, \
-    ACCESSKEY_FIELDS as accesskey_fields
+from pgadmin.utils import SHORTCUT_FIELDS as shortcut_fields
 from config import ON_DEMAND_RECORD_COUNT
+
+UPPER_CASE_STR = gettext('Upper case')
+LOWER_CASE_STR = gettext('Lower case')
+PRESERVE_STR = gettext('Preserve')
 
 
 def register_query_tool_preferences(self):
@@ -130,6 +133,40 @@ def register_query_tool_preferences(self):
         )
     )
 
+    self.view_edit_promotion_warning = self.preference.register(
+        'Options', 'view_edit_promotion_warning',
+        gettext("Show View/Edit Data Promotion Warning?"),
+        'boolean', True,
+        category_label=PREF_LABEL_OPTIONS,
+        help_str=gettext(
+            'If set to True, View/Edit Data tool will show promote to '
+            'Query tool confirm dialog on query edit.'
+        )
+    )
+
+    self.underline_query_cursor = self.preference.register(
+        'Options', 'underline_query_cursor',
+        gettext("Underline query at cursor?"),
+        'boolean', False,
+        category_label=PREF_LABEL_OPTIONS,
+        help_str=gettext(
+            'If set to True, query tool will parse and underline '
+            'the query at the cursor position.'
+        )
+    )
+
+    self.underlined_query_execute_warning = self.preference.register(
+        'Options', 'underlined_query_execute_warning',
+        gettext("Underlined query execute warning?"),
+        'boolean', True,
+        category_label=PREF_LABEL_OPTIONS,
+        help_str=gettext(
+            'If set to True, query tool will warn upon clicking the '
+            'Execute Query button in the query tool. The warning will '
+            'appear only if Underline query at cursor? is set to False.'
+        )
+    )
+
     self.sql_font_size = self.preference.register(
         'Editor', 'plain_editor_mode',
         gettext("Plain text mode?"), 'boolean', False,
@@ -171,6 +208,16 @@ def register_query_tool_preferences(self):
         )
     )
 
+    self.highlight_selection_matches = self.preference.register(
+        'Editor', 'highlight_selection_matches',
+        gettext("Highlight selection matches?"), 'boolean', True,
+        category_label=PREF_LABEL_OPTIONS,
+        help_str=gettext(
+            'Specifies whether or not to highlight matched selected text '
+            'in the editor.'
+        )
+    )
+
     self.brace_matching = self.preference.register(
         'Editor', 'brace_matching',
         gettext("Brace matching?"), 'boolean', True,
@@ -178,17 +225,6 @@ def register_query_tool_preferences(self):
         help_str=gettext(
             'Specifies whether or not to highlight matched braces '
             'in the editor.'
-        )
-    )
-
-    self.view_edit_promotion_warning = self.preference.register(
-        'Editor', 'view_edit_promotion_warning',
-        gettext("Show View/Edit Data Promotion Warning?"),
-        'boolean', True,
-        category_label=PREF_LABEL_OPTIONS,
-        help_str=gettext(
-            'If set to True, View/Edit Data tool will show promote to '
-            'Query tool confirm dialog on query edit.'
         )
     )
 
@@ -367,13 +403,32 @@ def register_query_tool_preferences(self):
 
     self.preference.register(
         'keyboard_shortcuts',
-        'execute_query',
+        'execute_script',
         gettext('Execute script'),
         'keyboardshortcut',
         {
             'alt': False,
             'shift': False,
             'control': False,
+            'key': {
+                'key_code': 116,
+                'char': 'F5'
+            }
+        },
+        category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
+        fields=shortcut_fields
+    )
+
+    self.preference.register(
+        'keyboard_shortcuts',
+        'execute_cursor',
+        gettext('Execute query'),
+        'keyboardshortcut',
+        {
+            'alt': True,
+            'shift': False,
+            'control': False,
+            'ctrl_is_meta': False,
             'key': {
                 'key_code': 116,
                 'char': 'F5'
@@ -530,132 +585,172 @@ def register_query_tool_preferences(self):
     # All about access keys
     self.preference.register(
         'keyboard_shortcuts', 'btn_open_file',
-        gettext('Accesskey (Open file)'), 'keyboardshortcut',
+        gettext('Open file'), 'keyboardshortcut',
         {
+            'alt': False,
+            'shift': False,
+            'control': True,
+            'ctrl_is_meta': True,
             'key': {
                 'key_code': 79,
                 'char': 'o'
-            }
+            },
         },
         category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=accesskey_fields
+        fields=shortcut_fields
     )
 
     self.preference.register(
         'keyboard_shortcuts', 'btn_save_file',
-        gettext('Accesskey (Save file)'), 'keyboardshortcut',
+        gettext('Save file'), 'keyboardshortcut',
         {
+            'alt': False,
+            'shift': False,
+            'control': True,
+            'ctrl_is_meta': True,
             'key': {
                 'key_code': 83,
                 'char': 's'
             }
         },
         category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=accesskey_fields
+        fields=shortcut_fields
+    )
+
+    self.preference.register(
+        'keyboard_shortcuts', 'btn_add_row',
+        gettext('Add row'), 'keyboardshortcut',
+        {
+            'alt': True,
+            'shift': True,
+            'control': False,
+            'ctrl_is_meta': False,
+            'key': {
+                'key_code': 65,
+                'char': 'a'
+            }
+        },
+        category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
+        fields=shortcut_fields
     )
 
     self.preference.register(
         'keyboard_shortcuts', 'btn_paste_row',
-        gettext('Accesskey (Paste rows)'), 'keyboardshortcut',
+        gettext('Paste rows'), 'keyboardshortcut',
         {
+            'alt': True,
+            'shift': True,
+            'control': False,
+            'ctrl_is_meta': False,
             'key': {
                 'key_code': 80,
                 'char': 'p'
             }
         },
         category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=accesskey_fields
+        fields=shortcut_fields
     )
 
     self.preference.register(
         'keyboard_shortcuts', 'btn_delete_row',
-        gettext('Accesskey (Delete rows)'), 'keyboardshortcut',
+        gettext('Delete rows'), 'keyboardshortcut',
         {
+            'alt': True,
+            'shift': True,
+            'control': False,
+            'ctrl_is_meta': False,
             'key': {
                 'key_code': 68,
                 'char': 'd'
             }
         },
         category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=accesskey_fields
+        fields=shortcut_fields
     )
 
     self.preference.register(
         'keyboard_shortcuts', 'btn_filter_dialog',
-        gettext('Accesskey (Filter dialog)'), 'keyboardshortcut',
+        gettext('Filter dialog'), 'keyboardshortcut',
         {
+            'alt': True,
+            'shift': True,
+            'control': False,
+            'ctrl_is_meta': False,
             'key': {
                 'key_code': 70,
                 'char': 'f'
             }
         },
         category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=accesskey_fields
+        fields=shortcut_fields
     )
 
     self.preference.register(
         'keyboard_shortcuts', 'btn_filter_options',
-        gettext('Accesskey (Filter options)'), 'keyboardshortcut',
+        gettext('Filter options'), 'keyboardshortcut',
         {
+            'alt': True,
+            'shift': True,
+            'control': False,
+            'ctrl_is_meta': False,
             'key': {
                 'key_code': 73,
                 'char': 'i'
             }
         },
         category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=accesskey_fields
-    )
-
-    self.preference.register(
-        'keyboard_shortcuts', 'btn_rows_limit',
-        gettext('Accesskey (Rows limit)'), 'keyboardshortcut',
-        {
-            'key': {
-                'key_code': 82,
-                'char': 'r'
-            }
-        },
-        category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=accesskey_fields
+        fields=shortcut_fields
     )
 
     self.preference.register(
         'keyboard_shortcuts', 'btn_execute_options',
-        gettext('Accesskey (Execute options)'), 'keyboardshortcut',
+        gettext('Execute options'), 'keyboardshortcut',
         {
+            'alt': True,
+            'shift': True,
+            'control': False,
+            'ctrl_is_meta': False,
             'key': {
                 'key_code': 88,
                 'char': 'x'
             }
         },
         category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=accesskey_fields
+        fields=shortcut_fields
     )
 
     self.preference.register(
         'keyboard_shortcuts', 'btn_cancel_query',
-        gettext('Accesskey (Cancel query)'), 'keyboardshortcut',
+        gettext('Cancel query'), 'keyboardshortcut',
         {
+            'alt': True,
+            'shift': True,
+            'control': False,
+            'ctrl_is_meta': False,
             'key': {
                 'key_code': 81,
                 'char': 'q'
             }
         },
         category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=accesskey_fields
+        fields=shortcut_fields
     )
 
     self.preference.register(
         'keyboard_shortcuts', 'btn_edit_options',
-        gettext('Accesskey (Edit options)'), 'keyboardshortcut',
+        gettext('Edit options'), 'keyboardshortcut',
         {
+            'alt': True,
+            'shift': True,
+            'control': False,
+            'ctrl_is_meta': False,
             'key': {
                 'key_code': 78,
                 'char': 'n'
             }
         },
         category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=accesskey_fields
+        fields=shortcut_fields
     )
 
     self.preference.register(
@@ -733,9 +828,9 @@ def register_query_tool_preferences(self):
     self.keyword_case = self.preference.register(
         'editor', 'keyword_case',
         gettext("Keyword case"), 'radioModern', 'upper',
-        options=[{'label': gettext('Upper case'), 'value': 'upper'},
-                 {'label': gettext('Lower case'), 'value': 'lower'},
-                 {'label': gettext('Preserve'), 'value': 'preserve'}],
+        options=[{'label': UPPER_CASE_STR, 'value': 'upper'},
+                 {'label': LOWER_CASE_STR, 'value': 'lower'},
+                 {'label': PRESERVE_STR, 'value': 'preserve'}],
         category_label=PREF_LABEL_SQL_FORMATTING,
         help_str=gettext(
             'Convert keywords to upper, lower, or preserve casing.'
@@ -745,9 +840,9 @@ def register_query_tool_preferences(self):
     self.identifier_case = self.preference.register(
         'editor', 'identifier_case',
         gettext("Identifier case"), 'radioModern', 'upper',
-        options=[{'label': gettext('Upper case'), 'value': 'upper'},
-                 {'label': gettext('Lower case'), 'value': 'lower'},
-                 {'label': gettext('Preserve'), 'value': 'preserve'}],
+        options=[{'label': UPPER_CASE_STR, 'value': 'upper'},
+                 {'label': LOWER_CASE_STR, 'value': 'lower'},
+                 {'label': PRESERVE_STR, 'value': 'preserve'}],
         category_label=PREF_LABEL_SQL_FORMATTING,
         help_str=gettext(
             'Convert identifiers to upper, lower, or preserve casing.'
@@ -757,9 +852,9 @@ def register_query_tool_preferences(self):
     self.function_case = self.preference.register(
         'editor', 'function_case',
         gettext("Function case"), 'radioModern', 'upper',
-        options=[{'label': gettext('Upper case'), 'value': 'upper'},
-                 {'label': gettext('Lower case'), 'value': 'lower'},
-                 {'label': gettext('Preserve'), 'value': 'preserve'}],
+        options=[{'label': UPPER_CASE_STR, 'value': 'upper'},
+                 {'label': LOWER_CASE_STR, 'value': 'lower'},
+                 {'label': PRESERVE_STR, 'value': 'preserve'}],
         category_label=PREF_LABEL_SQL_FORMATTING,
         help_str=gettext(
             'Convert function names to upper, lower, or preserve casing.'
@@ -769,9 +864,9 @@ def register_query_tool_preferences(self):
     self.data_type_case = self.preference.register(
         'editor', 'data_type_case',
         gettext("Data type case"), 'radioModern', 'upper',
-        options=[{'label': gettext('Upper case'), 'value': 'upper'},
-                 {'label': gettext('Lower case'), 'value': 'lower'},
-                 {'label': gettext('Preserve'), 'value': 'preserve'}],
+        options=[{'label': UPPER_CASE_STR, 'value': 'upper'},
+                 {'label': LOWER_CASE_STR, 'value': 'lower'},
+                 {'label': PRESERVE_STR, 'value': 'preserve'}],
         category_label=PREF_LABEL_SQL_FORMATTING,
         help_str=gettext(
             'Convert data types to upper, lower, or preserve casing.'
@@ -804,6 +899,16 @@ def register_query_tool_preferences(self):
         help_str=gettext(
             'Specifies whether or not to insert spaces instead of tabs '
             'when the tab key or auto-indent are used.'
+        )
+    )
+
+    self.sql_font_size = self.preference.register(
+        'Editor', 'indent_new_line',
+        gettext("Auto-indent new line?"), 'boolean', True,
+        category_label=PREF_LABEL_EDITOR,
+        help_str=gettext(
+            'Specifies whether the newly added line using enter key should '
+            'be auto-indented or not'
         )
     )
 

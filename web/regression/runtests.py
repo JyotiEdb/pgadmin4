@@ -29,8 +29,8 @@ from selenium.webdriver.firefox.options import Options as FirefoxOptions
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-if sys.version_info < (3, 4):
-    raise RuntimeError('The test suite must be run under Python 3.4 or later.')
+if sys.version_info < (3, 8):
+    raise RuntimeError('The test suite must be run under Python 3.8 or later.')
 
 import builtins
 
@@ -60,6 +60,7 @@ if config.SERVER_MODE is True:
 
 # disable master password for test cases
 config.MASTER_PASSWORD_REQUIRED = False
+config.USE_OS_SECRET_STORAGE = False
 
 from regression import test_setup
 from regression.feature_utils.app_starter import AppStarter

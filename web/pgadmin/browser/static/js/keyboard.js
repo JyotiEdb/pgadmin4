@@ -15,6 +15,7 @@ import gettext from 'sources/gettext';
 import pgWindow from 'sources/window';
 import usePreferences from '../../../preferences/static/js/store';
 
+
 const pgBrowser = pgAdmin.Browser = pgAdmin.Browser || {};
 
 pgBrowser.keyboardNavigation = pgBrowser.keyboardNavigation || {};
@@ -48,10 +49,10 @@ _.extend(pgBrowser.keyboardNavigation, {
           'sub_menu_create': commonUtils.parseShortcutValue(prefStore.getPreferences('browser', 'sub_menu_create')?.value),
           'sub_menu_delete': commonUtils.parseShortcutValue(prefStore.getPreferences('browser', 'sub_menu_delete')?.value),
           'sub_menu_refresh': commonUtils.parseShortcutValue(prefStore.getPreferences('browser', 'sub_menu_refresh')?.value),
-          'context_menu': commonUtils.parseShortcutValue(prefStore.getPreferences('browser', 'context_menu')?.value),
           'direct_debugging': commonUtils.parseShortcutValue(prefStore.getPreferences('browser', 'direct_debugging')?.value),
           'add_grid_row': commonUtils.parseShortcutValue(prefStore.getPreferences('browser', 'add_grid_row')?.value),
           'open_quick_search': commonUtils.parseShortcutValue(prefStore.getPreferences('browser', 'open_quick_search')?.value),
+          'close_tab_panel': commonUtils.parseShortcutValue(prefStore.getPreferences('browser', 'close_tab_panel')?.value),
 
         };
         this.shortcutMethods = {
@@ -60,7 +61,7 @@ _.extend(pgBrowser.keyboardNavigation, {
               this.keyboardShortcut.object_shortcut, this.keyboardShortcut.tools_shortcut,
               this.keyboardShortcut.help_shortcut],
           }}, // Main menu
-          'bindRightPanel': {'shortcuts': [this.keyboardShortcut.tabbed_panel_backward, this.keyboardShortcut.tabbed_panel_forward]}, // Main window panels
+          'bindRightPanel': {'shortcuts': [this.keyboardShortcut.tabbed_panel_backward, this.keyboardShortcut.tabbed_panel_forward, this.keyboardShortcut.close_tab_panel]}, // Main window panels
           'bindLeftTree': {'shortcuts': this.keyboardShortcut.left_tree_shortcut}, // Main menu,
           'bindSubMenuQueryTool': {'shortcuts': this.keyboardShortcut.sub_menu_query_tool}, // Sub menu - Open Query Tool,
           'bindSubMenuViewData': {'shortcuts': this.keyboardShortcut.sub_menu_view_data}, // Sub menu - Open View Data,
@@ -69,7 +70,6 @@ _.extend(pgBrowser.keyboardNavigation, {
           'bindSubMenuCreate': {'shortcuts': this.keyboardShortcut.sub_menu_create}, // Sub menu - Create Object,
           'bindSubMenuDelete': {'shortcuts': this.keyboardShortcut.sub_menu_delete}, // Sub menu - Delete object,
           'bindSubMenuRefresh': {'shortcuts': this.keyboardShortcut.sub_menu_refresh, 'bindElem': '#tree'}, // Sub menu - Refresh object,
-          'bindContextMenu': {'shortcuts': this.keyboardShortcut.context_menu}, // Sub menu - Open context menu,
           'bindDirectDebugging': {'shortcuts': this.keyboardShortcut.direct_debugging}, // Sub menu - Direct Debugging
           'bindAddGridRow': {'shortcuts': this.keyboardShortcut.add_grid_row}, // Subnode Grid Add Row
           'bindOpenQuickSearch': {'shortcuts': this.keyboardShortcut.open_quick_search}, // Subnode Grid Refresh Row
@@ -148,51 +148,57 @@ _.extend(pgBrowser.keyboardNavigation, {
   },
   bindRightPanel: function(event, combo) {
     const self = this;
-    let dockLayoutTabs = document.activeElement?.closest('.dock-layout')?.querySelectorAll('.dock-tab-btn');
-    let shortcut_obj = this.keyboardShortcut;
-    //if the focus is on the tab button
-    if (document.activeElement.closest('.dock-tab-btn')) {
-      let currDockTab = document.activeElement?.closest('.dock-tab-btn');
-      if(dockLayoutTabs?.length > 1 && currDockTab) {
-        for(let i=0; i<dockLayoutTabs.length; i++) {
-          if(dockLayoutTabs[i] == currDockTab) {
-            let activeTabIdx = i;
-            self._focusTab(dockLayoutTabs, activeTabIdx, shortcut_obj, combo);
-            break;
-          }
-        }
+    const shortcutObj = this.keyboardShortcut;
+    const activeElement = document.activeElement;
+
+    if (activeElement.closest('.dock-tab-btn')) {
+      const currDockTab = activeElement.closest('.dock-tab-btn');
+      const dockLayout = currDockTab.closest('.dock-layout');
+      const dockLayoutTabs = dockLayout ? Array.from(dockLayout.querySelectorAll('.dock-tab-btn')) : null;
+
+      if (dockLayoutTabs && dockLayoutTabs.length > 1) {
+        const activeTabIndex = dockLayoutTabs.indexOf(currDockTab);
+        self._focusTab(dockLayoutTabs, activeTabIndex, shortcutObj, combo);
       }
-      //if the tab is a iframe or the focus is within the content of tab
-    } else if (document.activeElement.nodeName === 'IFRAME' || document.activeElement.closest('.dock-tabpane.dock-tabpane-active')?.id) {
+    }
+    else if (activeElement.nodeName === 'IFRAME' || activeElement.closest('.dock-tabpane.dock-tabpane-active')) {
       let activeTabId = '';
-      //if the tab is a iframe
-      if (document.activeElement.nodeName === 'IFRAME'){
-        dockLayoutTabs = document.activeElement?.closest('#root')?.querySelectorAll('.dock-tab-btn');
-        activeTabId = document.activeElement?.id;
-        //if the focus is within the content of tab
-      } else if (document.activeElement.closest('.dock-tabpane.dock-tabpane-active')?.id){
-        activeTabId = document.activeElement.closest('.dock-tabpane.dock-tabpane-active')?.id;
+      activeTabId = (activeElement.nodeName === 'IFRAME') ? activeElement.id : activeElement.closest('.dock-tabpane.dock-tabpane-active').id;
+      const dockLayout = document.getElementById('root');
+      const dockLayoutTabs = dockLayout ? Array.from(dockLayout.querySelectorAll('.dock-tab-btn')) : null;
+
+      if (dockLayoutTabs && dockLayoutTabs.length > 1 && activeTabId) {
+        const activeTabIndex = dockLayoutTabs.findIndex(tab => tab.id.slice(14) === activeTabId);
+        self._focusTab(dockLayoutTabs, activeTabIndex, shortcutObj, combo);
       }
-      if(dockLayoutTabs?.length > 1 && activeTabId) {
-        for(let i=0; i<dockLayoutTabs.length; i++) {
-          let tabIdx = i;
-          let tabId = dockLayoutTabs[tabIdx].id?.slice(14);
-          if (tabId == activeTabId) {
-            self._focusTab(dockLayoutTabs, tabIdx, shortcut_obj, combo);
-            break;
-          }
+    }
+    else if (activeElement === document.body || document.querySelector('div[data-test="app-menu-bar"]')) {
+      const activeTabs = document.getElementsByClassName('dock-tabpane dock-tabpane-active');
+
+      if (activeTabs.length > 1) {
+        const activeTabId = activeTabs[1].id;
+        const dockLayout = document.getElementById('root');
+        const dockLayoutTabs = dockLayout ? Array.from(dockLayout.querySelectorAll('.dock-tab-btn')) : null;
+
+        if (dockLayoutTabs && dockLayoutTabs.length > 1 && activeTabId) {
+          const activeTabIndex = dockLayoutTabs.findIndex(tab => tab.id.slice(14) === activeTabId);
+          self._focusTab(dockLayoutTabs, activeTabIndex, shortcutObj, combo);
         }
       }
-      //if the focus is on the body or on the menu bar
-    } else if (document.activeElement === document.body || document.querySelector('div[data-test="app-menu-bar"]')) {
-      pgAdmin.Browser.docker.navigatePanel();
     }
   },
   _focusTab: function(dockLayoutTabs, activeTabIdx, shortcut_obj, combo){
-    if (combo.key === shortcut_obj.tabbed_panel_backward) activeTabIdx = (activeTabIdx + dockLayoutTabs.length - 1) % dockLayoutTabs.length;
-    else if (combo.key === shortcut_obj.tabbed_panel_forward) activeTabIdx = (activeTabIdx + 1) % dockLayoutTabs.length;
-    dockLayoutTabs[activeTabIdx]?.click();
-    dockLayoutTabs[activeTabIdx]?.focus();
+    if(combo.key === shortcut_obj.close_tab_panel) {
+      const panelId = dockLayoutTabs[activeTabIdx].id?.slice(14);
+      if (panelId) {
+        pgAdmin.Browser.docker.close(panelId);
+      }
+    } else {
+      if (combo.key === shortcut_obj.tabbed_panel_backward) activeTabIdx = (activeTabIdx + dockLayoutTabs.length - 1) % dockLayoutTabs.length;
+      else if (combo.key === shortcut_obj.tabbed_panel_forward) activeTabIdx = (activeTabIdx + 1) % dockLayoutTabs.length;
+      dockLayoutTabs[activeTabIdx]?.click();
+      dockLayoutTabs[activeTabIdx]?.focus();
+    }
   },
   bindLeftTree: function() {
     const tree = this.getTreeDetails();
@@ -256,10 +262,9 @@ _.extend(pgBrowser.keyboardNavigation, {
       node_obj, {action: 'create', item: tree.i}
     );
   },
-  bindSubMenuDelete: function() {
+  bindSubMenuDelete: function(event) {
     const tree = this.getTreeDetails();
-
-    if (!tree.d || pgAdmin.Browser.Nodes[tree.t.itemData(tree.i)._type].collection_node === true)
+    if (!tree.d || pgAdmin.Browser.Nodes[tree.t.itemData(tree.i)._type].collection_node === true || !event?.target?.classList?.contains('file-tree'))
       return;
 
     // Call delete object callback
@@ -279,9 +284,9 @@ _.extend(pgBrowser.keyboardNavigation, {
     if (!tree.d || (type !== 'function' && type !== 'procedure'))
       return;
 
-    if (pgAdmin.Tools.Debugger.can_debug(tree.d, tree.i, {'debug_type': 'direct'})) {
+    if (pgAdmin.Tools.Debugger.canDebug(tree.d, tree.i, {'debug_type': 'direct'})) {
       // Call debugger callback
-      pgAdmin.Tools.Debugger.get_function_information(pgAdmin.Browser.Nodes[type]);
+      pgAdmin.Tools.Debugger.getFunctionInformation(pgAdmin.Browser.Nodes[type]);
     }
   },
   isPropertyPanelVisible: function() {
@@ -306,6 +311,12 @@ _.extend(pgBrowser.keyboardNavigation, {
   bindOpenQuickSearch: function() {
     pgWindow.pgAdmin.Browser.all_menus_cache.help.mnu_quick_search_help.callback();
   },
+  bindAddGridRow: function() {
+    let gridElem = document.activeElement.closest('.pgrt')?.parentElement;
+    if (gridElem) {
+      gridElem.querySelector('button[data-test="add-row"]')?.click();
+    }
+  }
 });
 
 module.exports = pgAdmin.Browser.keyboardNavigation;

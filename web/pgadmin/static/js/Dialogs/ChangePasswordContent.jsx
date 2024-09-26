@@ -1,13 +1,3 @@
-/////////////////////////////////////////////////////////////
-//
-// pgAdmin 4 - PostgreSQL Tools
-//
-// Copyright (C) 2013 - 2024, The pgAdmin Development Team
-// This software is released under the PostgreSQL Licence
-//
-//////////////////////////////////////////////////////////////
-
-import { makeStyles } from '@material-ui/core';
 import React from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
@@ -34,9 +24,10 @@ class ChangePasswordSchema extends BaseUISchema {
         id: 'user', label: gettext('User'), type: 'text', disabled: true, visible: this.showUser
       }, {
         id: 'password', label: gettext('Current Password'), type: 'password',
-        disabled: self.isPgpassFileUsed, noEmpty: self.isPgpassFileUsed ? false : true,
+        disabled: self.isPgpassFileUsed, noEmpty: !self.isPgpassFileUsed,
         controlProps: {
-          maxLength: null
+          maxLength: null,
+          autoComplete: 'new-password'
         }
       }, {
         id: 'newPassword', label: gettext('New Password'), type: 'password',
@@ -72,20 +63,18 @@ class ChangePasswordSchema extends BaseUISchema {
   }
 }
 
-const useStyles = makeStyles((theme)=>({
-  root: {
-    ...theme.mixins.tabPanel,
-  },
-}));
-
 export default function ChangePasswordContent({getInitData=() => { /*This is intentional (SonarQube)*/ },
   onSave, onClose, hasCsrfToken=false, showUser=true}) {
-  const classes = useStyles();
+  const schema=React.useRef(null);
+  if (!schema.current)
+    schema.current = new ChangePasswordSchema(
+      '', false, hasCsrfToken, showUser
+    );
 
-  return<SchemaView
+  return <SchemaView
     formType={'dialog'}
     getInitData={getInitData}
-    schema={new ChangePasswordSchema('', false, hasCsrfToken, showUser)}
+    schema={schema.current}
     viewHelperProps={{
       mode: 'create',
     }}
@@ -96,7 +85,6 @@ export default function ChangePasswordContent({getInitData=() => { /*This is int
     disableSqlHelp={true}
     disableDialogHelp={true}
     isTabView={false}
-    formClassName={classes.root}
   />;
 }
 ChangePasswordContent.propTypes = {

@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
+import _ from 'lodash';
 import gettext from 'sources/gettext';
 import BaseUISchema from 'sources/SchemaView/base_schema.ui';
 import SecLabelSchema from '../../../../../static/js/sec_label.ui';
@@ -91,7 +92,7 @@ export default class MViewSchema extends BaseUISchema {
           return {
             type: 'select', options: obj.fieldOptions.table_amname_list,
             controlProps: {
-              allowClear: obj.isNew(state) ? true : false,
+              allowClear: obj.isNew(state),
             }
           };
         }, mode: ['create', 'properties', 'edit'], min_version: 120000,
@@ -110,7 +111,7 @@ export default class MViewSchema extends BaseUISchema {
       },{
         id: 'definition', label: gettext('Definition'), cell: 'text',
         type: 'sql', mode: ['create', 'edit'], group: gettext('Code'),
-        isFullTab: true, controlProps: { readOnly: this.nodeInfo && 'catalog' in this.nodeInfo ? true: false },
+        isFullTab: true, controlProps: { readOnly: this.nodeInfo && 'catalog' in this.nodeInfo },
       },
       {
         type: 'nested-tab', group: gettext('Parameter'), mode: ['create', 'edit'],
@@ -154,7 +155,10 @@ export default class MViewSchema extends BaseUISchema {
 
       if (state.definition) {
         obj.warningText = null;
-        if (obj.origData.oid !== undefined && state.definition !== obj.origData.definition) {
+        if (
+          !_.isUndefined(obj.origData.oid) &&
+          state.definition !== obj.origData.definition
+        ) {
           obj.warningText = gettext(
             'Updating the definition will drop and re-create the materialized view. It may result in loss of information about its dependent objects.'
           ) + '<br><br><b>' + gettext('Do you want to continue?') + '</b>';

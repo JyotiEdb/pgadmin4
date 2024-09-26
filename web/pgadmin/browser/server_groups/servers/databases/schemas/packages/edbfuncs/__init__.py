@@ -97,7 +97,7 @@ class EdbFuncModule(CollectionNodeModule):
         """
         Register preferences for this module.
         """
-        # Add the node informaton for browser, not in respective
+        # Add the node information for browser, not in respective
         # node preferences
         self.browser_preference = Preferences.module('browser')
         self.pref_show_system_objects = self.browser_preference.preference(
@@ -582,7 +582,7 @@ class EdbFuncView(PGChildNodeView, DataTypeReader):
         if sql is None:
             return None
         start = 0
-        start_position = re.search(r"\s+[is|as]+\s+", sql, flags=re.I)
+        start_position = re.search(r"\s+(is|as)+\s+", sql, flags=re.I)
 
         if start_position:
             start = start_position.start() + 4
@@ -665,7 +665,7 @@ class EdbProcModule(CollectionNodeModule):
         """
         Register preferences for this module.
         """
-        # Add the node informaton for browser, not in respective
+        # Add the node information for browser, not in respective
         # node preferences
         self.browser_preference = Preferences.module('browser')
         self.pref_show_system_objects = self.browser_preference.preference(

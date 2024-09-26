@@ -9,13 +9,14 @@
 
 import PropTypes from 'prop-types';
 
+import { styled } from '@mui/material/styles';
+
 import React, { useEffect, useRef } from 'react';
 
-import DeleteSweepIcon from '@material-ui/icons/DeleteSweep';
-import { Box } from '@material-ui/core';
-import { makeStyles } from '@material-ui/core/styles';
-import BugReportRoundedIcon from '@material-ui/icons/BugReportRounded';
-import CloseSharpIcon from '@material-ui/icons/CloseSharp';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import { Box } from '@mui/material';
+import BugReportRoundedIcon from '@mui/icons-material/BugReportRounded';
+import CloseSharpIcon from '@mui/icons-material/CloseSharp';
 
 import url_for from 'sources/url_for';
 import gettext from 'sources/gettext';
@@ -23,7 +24,7 @@ import pgAdmin from 'sources/pgadmin';
 import Loader from 'sources/components/Loader';
 
 import SchemaView from '../../../../../static/js/SchemaView';
-import getApiInstance from '../../../../../static/js/api_instance';
+import getApiInstance, { parseApiError } from '../../../../../static/js/api_instance';
 import { DefaultButton, PrimaryButton } from '../../../../../static/js/components/Buttons';
 import { getAppropriateLabel, getDebuggerTitle } from '../debugger_utils';
 import { DebuggerArgumentSchema } from './DebuggerArgs.ui';
@@ -32,44 +33,44 @@ import { BROWSER_PANELS } from '../../../../../browser/static/js/constants';
 import usePreferences from '../../../../../preferences/static/js/store';
 
 
-const useStyles = makeStyles((theme) =>
-  ({
-    root: {
-      display: 'flex',
-      flexDirection: 'column',
-      flexGrow: 1,
-      height: '100%',
+const StyledBox = styled(Box)(({theme}) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  flexGrow: 1,
+  height: '100%',
+  backgroundColor: theme.palette.background.default,
+  overflow: 'hidden',
+  '& .DebuggerArgument-body': {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%',
+    minHeight: 0,
+    '& .DebuggerArgument-schema': {
+      padding: 0 + ' !important',
       backgroundColor: theme.palette.background.default,
-      overflow: 'hidden',
-    },
-    body: {
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      minHeight: 0,
-    },
-    actionBtn: {
-      alignItems: 'flex-start',
-    },
-    buttonMargin: {
-      marginLeft: '0.5em'
-    },
-    debugBtn: {
-      fontSize: '1.12rem !important',
-    },
-    footer: {
-      borderTop: `1px solid ${theme.otherVars.inputBorderColor} !important`,
-      padding: '0.5rem',
-      display: 'flex',
-      width: '100%',
-      background: theme.otherVars.headerBg,
     }
-  }),
-);
+  },
+  '& .DebuggerArgument-footer': {
+    borderTop: `1px solid ${theme.otherVars.inputBorderColor} !important`,
+    padding: '0.5rem',
+    display: 'flex',
+    width: '100%',
+    background: theme.otherVars.headerBg,
+    '& .DebuggerArgument-actionBtn': {
+      alignItems: 'flex-start',
+      '& .DebuggerArgument-buttonMargin': {
+        marginLeft: '0.5em'
+      },
+      '& .DebuggerArgument-debugBtn': {
+        fontSize: '1.12rem !important',
+      },
+    },
+  }
+}));
 
 
 export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, isEdbProc, transId, pgTreeInfo, pgData, ...props }) {
-  const classes = useStyles();
+
   const debuggerArgsSchema = useRef(new DebuggerArgumentSchema());
   const api = getApiInstance();
   const debuggerArgsData = useRef([]);
@@ -267,10 +268,10 @@ export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, 
       funcObj.push({
         'name': argName[index],
         'type': argType[index],
-        'is_null': argData['is_null'] ? true : false,
-        'expr': argData['is_expression'] ? true : false,
+        'is_null': argData['is_null'],
+        'expr': argData['is_expression'],
         'value': values,
-        'use_default': argData['use_default'] ? true : false,
+        'use_default': argData['use_default'],
         'default_value': defValList[index],
         'disable_use_default': isUnnamedParam ? defValList[index] == DEBUGGER_ARGS.NO_DEFAULT_VALUE : defValList[index] == DEBUGGER_ARGS.NO_DEFAULT,
       });
@@ -318,7 +319,7 @@ export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, 
     let myObj = [];
     for (let i = 0; i < argType.length; i++) {
       let useDefValue = checkIsDefault(defValList[i]);
-      if (debuggerInfo['proargmodes'] == null) {
+      if (debuggerInfo['proargmodes'] == null || (argMode?.[i] == 'i' || argMode?.[i] == 'b' || (isEdbProc && argMode?.[i] == 'o'))) {
         myObj.push({
           'name': myargname[i],
           'type': argType[i],
@@ -326,17 +327,6 @@ export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, 
           'default_value': defValList[i],
           'disable_use_default': defValList[i] == DEBUGGER_ARGS.NO_DEFAULT_VALUE,
         });
-      } else {
-        if (argMode && (argMode[i] == 'i' || argMode[i] == 'b' ||
-          (isEdbProc && argMode[i] == 'o'))) {
-          myObj.push({
-            'name': myargname[i],
-            'type': argType[i],
-            'use_default': useDefValue,
-            'default_value': defValList[i],
-            'disable_use_default': defValList[i] == DEBUGGER_ARGS.NO_DEFAULT_VALUE,
-          });
-        }
       }
     }
     return myObj;
@@ -443,7 +433,7 @@ export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, 
     try {
       resolve(debuggerArgsData.current);
     } catch (error) {
-      reject(error);
+      reject(error instanceof Error ? error : Error(gettext('Something went wrong')));
     }
   });
 
@@ -528,21 +518,19 @@ export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, 
         'type': arg.type,
         'value': 'NULL',
       });
-    } else {
+    } else if (arg.use_default) {
       // Check if default value to be used or not
-      if (arg.use_default) {
-        argsValueList.push({
-          'name': arg.name,
-          'type': arg.type,
-          'value': arg.default_value,
-        });
-      } else {
-        argsValueList.push({
-          'name': arg.name,
-          'type': arg.type,
-          'value': arg.value,
-        });
-      }
+      argsValueList.push({
+        'name': arg.name,
+        'type': arg.type,
+        'value': arg.default_value,
+      });
+    } else {
+      argsValueList.push({
+        'name': arg.name,
+        'type': arg.type,
+        'value': arg.value,
+      });
     }
   }
   function getFunctionID(d, treeInfo) {
@@ -740,8 +728,8 @@ export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, 
               .catch((error) => {
                 setLoaderText('');
                 pgAdmin.Browser.notifier.alert(
-                  gettext('Error occured: '),
-                  gettext(error.response.data)
+                  gettext('Error occurred: '),
+                  parseApiError(error)
                 );
               });
             /* Close the debugger modal dialog */
@@ -752,7 +740,7 @@ export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, 
             setLoaderText('');
             pgAdmin.Browser.notifier.alert(
               gettext('Debugger Target Initialization Error'),
-              gettext(error.response.data)
+              parseApiError(error)
             );
           });
 
@@ -773,7 +761,7 @@ export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, 
             props.closeModal();
             pgAdmin.Browser.notifier.alert(
               gettext('Debugger Listener Startup Error'),
-              gettext(error.response.data)
+              parseApiError(error)
             );
           });
         setLoaderText('');
@@ -797,7 +785,7 @@ export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, 
             setLoaderText('');
             pgAdmin.Browser.notifier.alert(
               gettext('Debugger Listener Startup Set Arguments Error'),
-              gettext(error.response.data)
+              parseApiError(error)
             );
           });
       }
@@ -812,8 +800,8 @@ export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, 
   }
 
   return (
-    <Box className={classes.root}>
-      <Box className={classes.body}>
+    <StyledBox>
+      <Box className='DebuggerArgument-body'>
         {
           loadArgs > 0 &&
           <>
@@ -826,12 +814,13 @@ export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, 
               showFooter={false}
               isTabView={false}
               Notifier={pgAdmin.Browser.notifier}
+              formClassName='DebuggerArgument-schema'
               onDataChange={(isChanged, changedData) => {
                 let isValid = false;
                 let skipStep = false;
-                if ('_sessData' in debuggerArgsSchema.current) {
+                if ('sessData' in debuggerArgsSchema.current) {
                   isValid = true;
-                  debuggerArgsSchema.current._sessData.aregsCollection.forEach((data) => {
+                  debuggerArgsSchema.current.sessData.aregsCollection.forEach((data) => {
 
                     if (skipStep) { return; }
 
@@ -856,25 +845,24 @@ export default function DebuggerArgumentComponent({ debuggerInfo, restartDebug, 
           </>
         }
       </Box>
-      <Box className={classes.footer}>
+      <Box className='DebuggerArgument-footer'>
         <Box>
-          <DefaultButton className={classes.buttonMargin} onClick={() => { clearArgs(); }} startIcon={<DeleteSweepIcon onClick={() => { clearArgs(); }} />}>
+          <DefaultButton className='DebuggerArgument-buttonMargin' onClick={() => { clearArgs(); }} startIcon={<DeleteSweepIcon onClick={() => { clearArgs(); }} />}>
             {gettext('Clear All')}
           </DefaultButton>
         </Box>
-        <Box className={classes.actionBtn} marginLeft="auto">
-          <DefaultButton className={classes.buttonMargin} onClick={() => { props.closeModal(); }} startIcon={<CloseSharpIcon onClick={() => { props.closeModal(); }} />}>
+        <Box className='DebuggerArgument-actionBtn' marginLeft="auto">
+          <DefaultButton className='DebuggerArgument-buttonMargin' onClick={() => { props.closeModal(); }} startIcon={<CloseSharpIcon onClick={() => { props.closeModal(); }} />}>
             {gettext('Cancel')}
           </DefaultButton>
-          <PrimaryButton className={classes.buttonMargin} startIcon={<BugReportRoundedIcon className={classes.debugBtn} />}
+          <PrimaryButton className='DebuggerArgument-buttonMargin' startIcon={<BugReportRoundedIcon className='DebuggerArgument-debugBtn' />}
             disabled={isDisableDebug}
             onClick={() => { startDebugging(); }}>
             {gettext('Debug')}
           </PrimaryButton>
         </Box>
       </Box>
-    </Box>
-
+    </StyledBox>
   );
 }
 
@@ -887,4 +875,3 @@ DebuggerArgumentComponent.propTypes = {
   pgTreeInfo: PropTypes.object,
   pgData: PropTypes.object,
 };
-

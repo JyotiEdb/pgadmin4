@@ -85,11 +85,10 @@ function getRangeSchema(nodeObj, treeNodeInfo, itemNodeData) {
         return new Promise((resolve, reject)=>{
           const api = getApiInstance();
 
-          let _url = nodeObj.generate_url.apply(
-            nodeObj, [
-              null, 'get_subopclass', itemNodeData, false,
-              treeNodeInfo,
-            ]);
+          let _url = nodeObj.generate_url(
+            null, 'get_subopclass', itemNodeData, false,
+            treeNodeInfo,
+          );
           let data;
 
           if(!_.isUndefined(typname) && typname != ''){
@@ -101,7 +100,7 @@ function getRangeSchema(nodeObj, treeNodeInfo, itemNodeData) {
               data = res.data.data;
               resolve(data);
             }).catch((err)=>{
-              reject(err);
+              reject(err instanceof Error ? err : Error(gettext('Something went wrong')));
             });
           } else {
             resolve(data);
@@ -113,11 +112,10 @@ function getRangeSchema(nodeObj, treeNodeInfo, itemNodeData) {
         return new Promise((resolve, reject)=>{
           const api = getApiInstance();
 
-          let _url = nodeObj.generate_url.apply(
-            nodeObj, [
-              null, 'get_canonical', itemNodeData, false,
-              treeNodeInfo,
-            ]);
+          let _url = nodeObj.generate_url(
+            null, 'get_canonical', itemNodeData, false,
+            treeNodeInfo,
+          );
           let data = [];
 
           if(!_.isUndefined(name) && name != '' && name != null){
@@ -129,7 +127,7 @@ function getRangeSchema(nodeObj, treeNodeInfo, itemNodeData) {
               data = res.data.data;
               resolve(data);
             }).catch((err)=>{
-              reject(err);
+              reject(err instanceof Error ? err : Error(gettext('Something went wrong')));
             });
           } else {
             resolve(data);
@@ -140,11 +138,10 @@ function getRangeSchema(nodeObj, treeNodeInfo, itemNodeData) {
         return new Promise((resolve, reject)=>{
           const api = getApiInstance();
 
-          let _url = nodeObj.generate_url.apply(
-            nodeObj, [
-              null, 'get_stypediff', itemNodeData, false,
-              treeNodeInfo,
-            ]);
+          let _url = nodeObj.generate_url(
+            null, 'get_stypediff', itemNodeData, false,
+            treeNodeInfo,
+          );
           let data;
 
           if(!_.isUndefined(typname) && typname != '' &&
@@ -158,7 +155,7 @@ function getRangeSchema(nodeObj, treeNodeInfo, itemNodeData) {
               data = res.data.data;
               resolve(data);
             }).catch((err)=>{
-              reject(err);
+              reject(err instanceof Error ? err : Error(gettext('Something went wrong')));
             });
           } else {
             resolve(data);
@@ -348,7 +345,7 @@ class RangeSchema extends BaseUISchema {
           this.options = [];
         }
 
-        return disableCollNameControl ? false : true;
+        return !disableCollNameControl;
       },
       readonly: function(state) {
         return !obj.isNew(state);
@@ -1059,7 +1056,7 @@ class DataTypeSchema extends BaseUISchema {
       }
     },{
       id: 'maxsize',
-      group: gettext('Definition'),
+      group: gettext('Data Type'),
       label: gettext('Size'),
       type: 'int',
       deps: ['typtype'],

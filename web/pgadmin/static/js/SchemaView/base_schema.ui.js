@@ -9,6 +9,8 @@
 
 import _ from 'lodash';
 
+import { memoizeFn } from 'sources/utils';
+
 /* This is the base schema class for SchemaView.
  * A UI schema must inherit this to use SchemaView for UI.
  */
@@ -22,6 +24,10 @@ export default class BaseUISchema {
     this.filterGroups = []; // If set, these groups will be filtered out
     this.informText = null; // Inform text to show after save, this only saves it
     this._top = null;
+
+    this._state = null;
+    this._id = Date.now();
+    this._dynamicFields = false;
   }
 
   /* Top schema is helpful if this is used as child */
@@ -35,17 +41,36 @@ export default class BaseUISchema {
 
   /* The original data before any changes */
   set origData(val) {
-    this._origData = val;
+    throw new Error('Property \'origData\' is readonly.');
   }
 
   get origData() {
-    return this._origData || {};
+    return this.state?.initData || {};
   }
 
-  /* The session data, can be useful but setting this will not affect UI
-  this._sessData is set by SchemaView directly. set sessData should not be allowed anywhere */
+  set state(state) {
+    this._state = state;
+  }
+
+  get state() {
+    return this._state;
+  }
+
+  get _sessData() {
+    return this._state?.data;
+  }
+
+  set _sessData(val) {
+    throw new Error('Property _sessData is readonly.', val);
+  }
+
+  /*
+   * The session data, can be useful but setting this will not affect UI.
+   * this.sessData is set by SchemaView directly. set sessData should not be
+   * allowed anywhere.
+   */
   get sessData() {
-    return this._sessData || {};
+    return this.state?.data;
   }
 
   set sessData(val) {
@@ -71,19 +96,31 @@ export default class BaseUISchema {
   concat base fields with extraFields.
   */
   get fields() {
-    return this.baseFields
-      .filter((field)=>{
-        let retval;
+    if (!this.__filteredFields) {
+      const getFields = (baseFields, keys, filterGroups) => baseFields.filter(
+        (field) => {
+          let retval;
 
-        /* If any groups are to be filtered */
-        retval = this.filterGroups.indexOf(field.group) == -1;
+          // If any groups are to be filtered.
+          retval = filterGroups.indexOf(field.group) == -1;
 
-        /* Select only keys, if specified */
-        if(this.keys) {
-          retval = retval && this.keys.indexOf(field.id) > -1;
+          // Select only keys, if specified.
+          if(retval && keys) {
+            retval = keys.indexOf(field.id) > -1;
+          }
+
+          return retval;
         }
-        return retval;
-      });
+      );
+
+      // Memoize the results (if required)
+      this.__filteredFields =
+        this._dynamicFields ? getFields : memoizeFn(getFields);
+    }
+
+    return this.__filteredFields(
+      this.baseFields, this.keys, this.filterGroups
+    );
   }
 
   initialise() {
@@ -167,5 +204,9 @@ export default class BaseUISchema {
       res = options;
     }
     return res;
+  }
+
+  toJSON() {
+    return this._id;
   }
 }

@@ -23,12 +23,13 @@ _setup_env() {
     # new Python versions installed parallel to the old ones.
     OS_VERSION=$(grep "^VERSION_ID=" /etc/os-release | awk -F "=" '{ print $2 }' | sed 's/"//g' | awk -F "." '{ print $1 }')
     SYSTEM_PYTHON_PATH='/usr/bin/python3'
-    PYTHON_BINARY='python3'
+    PYTHON_BINARY=$("${SYSTEM_PYTHON_PATH}" -c "import sys; print('python%d.%.d' % (sys.version_info.major, sys.version_info.minor))")
+    PYTHON_BINARY_WITHOUT_DOTS='python3'
     if [ "$2" == 'redhat' ] && [ "${OS_VERSION}" == "8" ]; then
       SYSTEM_PYTHON_PATH='/usr/bin/python3.9'
       PYTHON_BINARY='python3.9'
+      PYTHON_BINARY_WITHOUT_DOTS='python39'
     fi
-    PYTHON_BINARY_WITHOUT_DOTS=$(echo ${PYTHON_BINARY} | sed -e 's/\.//g')
 }
 
 _cleanup() {
@@ -132,55 +133,56 @@ _create_python_virtualenv() {
 _build_runtime() {
     echo "Assembling the desktop runtime..."
 
-    # Get a fresh copy of nwjs.
-    # NOTE: The nw download servers seem to be very unreliable, so at the moment we're using wget
-    #       in a retry loop as Yarn/Npm don't seem to like that.
+    # Get a fresh copy of electron.
 
-    # YARN:
-    # yarn add --cwd "${BUILDROOT}" nw
-    # YARN END
+    ELECTRON_ARCH="x64"
+    if [ "$(uname -m)" == "arm64" ]; then
+      ELECTRON_ARCH="arm64"
+    fi
 
-    # WGET:
-    # Comment out the below line as the latest version having some
-    # problem https://github.com/nwjs/nw.js/issues/7964, so for the time being
-    # hardcoded the version to 0.77.0
-    # NW_VERSION=$(yarn info nw | grep latest | awk -F "'" '{ print $2}')
-    NW_VERSION="0.77.0"
+    ELECTRON_VERSION="$(npm info electron version)"
 
     pushd "${BUILDROOT}" > /dev/null || exit
         while true;do
-            wget "https://dl.nwjs.io/v${NW_VERSION}/nwjs-v${NW_VERSION}-linux-x64.tar.gz" && break
-            rm "nwjs-v${NW_VERSION}-linux-x64.tar.gz"
+            wget "https://github.com/electron/electron/releases/download/v${ELECTRON_VERSION}/electron-v${ELECTRON_VERSION}-linux-${ELECTRON_ARCH}.zip" && break
+            rm "electron-v${ELECTRON_VERSION}-linux-${ELECTRON_ARCH}.zip"
         done
-        tar -zxvf "nwjs-v${NW_VERSION}-linux-x64.tar.gz"
+        unzip "electron-v${ELECTRON_VERSION}-linux-${ELECTRON_ARCH}.zip" -d "electron-v${ELECTRON_VERSION}-linux-${ELECTRON_ARCH}"
     popd > /dev/null || exit
-    # WGET END
 
-    # Copy nwjs into the staging directory
+    # Copy electron into the staging directory
     mkdir -p "${DESKTOPROOT}/usr/${APP_NAME}/bin"
 
-    # The chmod command below is needed to fix the permission issue of
-    # the NWjs binaries and files.
     # Change the permission for others and group the same as the owner
-    chmod -R og=u "${BUILDROOT}/nwjs-v${NW_VERSION}-linux-x64"/*
+    chmod -R og=u "${BUILDROOT}/electron-v${ELECTRON_VERSION}-linux-${ELECTRON_ARCH}"/*
     # Explicitly remove write permissions for others and group
-    chmod -R og-w "${BUILDROOT}/nwjs-v${NW_VERSION}-linux-x64"/*
+    chmod -R og-w "${BUILDROOT}/electron-v${ELECTRON_VERSION}-linux-${ELECTRON_ARCH}"/*
 
-    # YARN:
-    # cp -r "${BUILDROOT}/node_modules/nw/nwjs"/* "${DESKTOPROOT}/usr/${APP_NAME}/bin"
-    #  YARN END
+    BUNDLEDIR="${DESKTOPROOT}/usr/${APP_NAME}/bin"
 
     # WGET:
-    cp -r "${BUILDROOT}/nwjs-v${NW_VERSION}-linux-x64"/* "${DESKTOPROOT}/usr/${APP_NAME}/bin"
+    cp -r "${BUILDROOT}/electron-v${ELECTRON_VERSION}-linux-${ELECTRON_ARCH}"/* "${BUNDLEDIR}"
     # WGET END
 
-    mv "${DESKTOPROOT}/usr/${APP_NAME}/bin/nw" "${DESKTOPROOT}/usr/${APP_NAME}/bin/${APP_NAME}"
+    mv "${BUNDLEDIR}/electron" "${BUNDLEDIR}/${APP_NAME}"
 
-    cp -r "${SOURCEDIR}/runtime/assets" "${DESKTOPROOT}/usr/${APP_NAME}/bin/assets"
-    cp -r "${SOURCEDIR}/runtime/src" "${DESKTOPROOT}/usr/${APP_NAME}/bin/src"
+    mkdir -p "${BUNDLEDIR}/resources/app"
+    cp -r "${SOURCEDIR}/runtime/assets" "${BUNDLEDIR}/resources/app/assets"
+    cp -r "${SOURCEDIR}/runtime/src" "${BUNDLEDIR}/resources/app/src"
 
-    cp "${SOURCEDIR}/runtime/package.json" "${DESKTOPROOT}/usr/${APP_NAME}/bin/"
-    yarn --cwd "${DESKTOPROOT}/usr/${APP_NAME}/bin" install --production=true
+    cp "${SOURCEDIR}/runtime/package.json" "${BUNDLEDIR}/resources/app"
+    cp "${SOURCEDIR}/runtime/.yarnrc.yml" "${BUNDLEDIR}/resources/app"
+
+    # Install the runtime node_modules
+    pushd "${BUNDLEDIR}/resources/app" > /dev/null || exit
+        yarn set version berry
+        yarn set version 3
+        yarn plugin import workspace-tools
+        yarn workspaces focus --production
+
+        # remove the yarn cache
+        rm -rf .yarn .yarn*
+    popd > /dev/null || exit
 
     # Create the icon
     mkdir -p "${DESKTOPROOT}/usr/share/icons/hicolor/128x128/apps/"
@@ -211,10 +213,18 @@ _build_docs() {
 _copy_code() {
     echo "Copying the server code..."
 
+    OS_VERSION=$(grep "^VERSION_ID=" /etc/os-release | awk -F "=" '{ print $2 }' | sed 's/"//g' | awk -F "." '{ print $1 }')
+    if [ "$1" == 'redhat' ] && [ "${OS_VERSION}" == "8" ]; then
+      echo "Setting file permission through umask..."
+      umask u+rwx,go+rx,go-w
+    fi
+
     # Remove any TCL-related files that may cause us problems
     find "${SERVERROOT}/usr/${APP_NAME}/venv/" -name "_tkinter*" -print0 | xargs -0 rm -rf
 
     pushd "${SOURCEDIR}/web" > /dev/null || exit
+        yarn set version berry
+        yarn set version 3
         yarn install
         yarn run bundle
     popd > /dev/null || exit
@@ -224,7 +234,7 @@ _copy_code() {
     cp "${SOURCEDIR}/pkg/linux/config_distro.py" "${SERVERROOT}/usr/${APP_NAME}/web/"
     cd "${SERVERROOT}/usr/${APP_NAME}/web/" || exit
     rm -f pgadmin4.db config_local.*
-    rm -rf jest.config.js babel.* package.json node_modules/ regression/ tools/ pgadmin/static/js/generated/.cache
+    rm -rf jest.config.js babel.* package.json .yarn* yarn* .editorconfig .eslint* node_modules/ regression/ tools/ pgadmin/static/js/generated/.cache
     find . -name "tests" -type d -print0 | xargs -0 rm -rf
     find . -name "feature_tests" -type d -print0 | xargs -0 rm -rf
     find . -name "__pycache__" -type d -print0 | xargs -0 rm -rf

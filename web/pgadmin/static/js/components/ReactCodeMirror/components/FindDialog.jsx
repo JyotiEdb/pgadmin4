@@ -8,16 +8,17 @@
 //////////////////////////////////////////////////////////////
 
 import React, { useEffect, useRef, useState } from 'react';
+import { styled } from '@mui/material/styles';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
-import { Box, InputAdornment, makeStyles } from '@material-ui/core';
+import { Box, InputAdornment } from '@mui/material';
 import { InputText } from '../../FormComponents';
 import { PgIconButton } from '../../Buttons';
-import CloseIcon from '@material-ui/icons/CloseRounded';
-import ArrowDownwardRoundedIcon from '@material-ui/icons/ArrowDownwardRounded';
-import ArrowUpwardRoundedIcon from '@material-ui/icons/ArrowUpwardRounded';
-import SwapHorizRoundedIcon from '@material-ui/icons/SwapHorizRounded';
-import SwapCallsRoundedIcon from '@material-ui/icons/SwapCallsRounded';
+import CloseIcon from '@mui/icons-material/CloseRounded';
+import ArrowDownwardRoundedIcon from '@mui/icons-material/ArrowDownwardRounded';
+import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
+import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
+import SwapCallsRoundedIcon from '@mui/icons-material/SwapCallsRounded';
 import { RegexIcon, FormatCaseIcon } from '../../ExternalIcon';
 
 import {
@@ -31,21 +32,19 @@ import {
   replaceAll,
 } from '@codemirror/search';
 
-const useStyles = makeStyles((theme)=>({
-  root: {
-    position: 'absolute',
-    zIndex: 99,
-    right: '4px',
-    top: '0px',
-    ...theme.mixins.panelBorder.all,
-    borderTop: 'none',
-    padding: '2px 4px',
-    width: '250px',
-    backgroundColor: theme.palette.background.default,
-  },
-  marginTop: {
+const StyledBox = styled(Box)(({theme}) => ({
+  position: 'absolute',
+  zIndex: 99,
+  right: '4px',
+  top: '0px',
+  ...theme.mixins.panelBorder.all,
+  borderTop: 'none',
+  padding: '2px 4px',
+  width: '250px',
+  backgroundColor: theme.palette.background.default,
+  '& .CodeMirror-marginTop': {
     marginTop: '0.25rem',
-  },
+  }
 }));
 
 export default function FindDialog({editor, show, replace, onClose}) {
@@ -55,7 +54,7 @@ export default function FindDialog({editor, show, replace, onClose}) {
   const [matchCase, setMatchCase] = useState(false);
   const findInputRef = useRef();
   const searchQuery = useRef();
-  const classes = useStyles();
+
 
   const search = ()=>{
     if(editor) {
@@ -80,7 +79,7 @@ export default function FindDialog({editor, show, replace, onClose}) {
       // Get selected text from editor and set it to find/replace input.
       let selText = editor.getSelection();
       setFindVal(selText);
-      findInputRef.current && findInputRef.current.select();
+      findInputRef.current?.select();
     }
   }, [show]);
 
@@ -147,7 +146,7 @@ export default function FindDialog({editor, show, replace, onClose}) {
   }
 
   return (
-    <Box className={classes.root} style={{visibility: show ? 'visible' : 'hidden'}} tabIndex="0" onKeyDown={onEscape}>
+    <StyledBox style={{visibility: show ? 'visible' : 'hidden'}} tabIndex="0" onKeyDown={onEscape}>
       <InputText value={findVal}
         inputRef={(ele)=>{findInputRef.current = ele;}}
         onChange={(value)=>setFindVal(value)}
@@ -163,12 +162,12 @@ export default function FindDialog({editor, show, replace, onClose}) {
       />
       {replace &&
       <InputText value={replaceVal}
-        className={classes.marginTop}
+        className='CodeMirror-marginTop'
         onChange={(value)=>setReplaceVal(value)}
         onKeyPress={onReplaceEnter}
       />}
 
-      <Box display="flex" className={classes.marginTop}>
+      <Box display="flex" className='CodeMirror-marginTop'>
         <PgIconButton title={gettext('Previous')} icon={<ArrowUpwardRoundedIcon />} size="xs" noBorder onClick={onFindPrev}
           style={{marginRight: '2px'}} />
         <PgIconButton title={gettext('Next')} icon={<ArrowDownwardRoundedIcon />} size="xs" noBorder onClick={onFindNext}
@@ -182,7 +181,7 @@ export default function FindDialog({editor, show, replace, onClose}) {
           <PgIconButton title={gettext('Close')} icon={<CloseIcon />} size="xs" noBorder onClick={clearAndClose}/>
         </Box>
       </Box>
-    </Box>
+    </StyledBox>
   );
 }
 

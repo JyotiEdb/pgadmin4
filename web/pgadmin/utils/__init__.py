@@ -11,16 +11,18 @@ import os
 import sys
 import json
 import subprocess
+import re
 from collections import defaultdict
 from operator import attrgetter
 
+from pathlib import Path
 from flask import Blueprint, current_app, url_for
 from flask_babel import gettext
 from flask_security import current_user, login_required
 from flask_security.utils import get_post_login_redirect, \
     get_post_logout_redirect
 from threading import Lock
-
+import config
 from .paths import get_storage_directory
 from .preferences import Preferences
 from pgadmin.utils.constants import UTILITIES_ARRAY, USER_NOT_FOUND, \
@@ -210,6 +212,25 @@ else:
         return os.path.realpath(os.path.expanduser('~/'))
 
 
+def get_directory_and_file_name(drivefilepath):
+    """
+    Returns directory name if specified and file name
+    :param drivefilepath: file path like '<shared_drive_name>:/filename' or
+    '/filename'
+    :return: directory name and file name
+    """
+    dir_name = ''
+    file_name = drivefilepath
+    if config.SHARED_STORAGE:
+        shared_dirs = [sdir['name'] + ':' for sdir in config.SHARED_STORAGE]
+        if len(re.findall(r"(?=(" + '|'.join(shared_dirs) + r"))",
+                          drivefilepath)) > 0:
+            dir_file_paths = drivefilepath.split(':/')
+            dir_name = dir_file_paths[0]
+            file_name = dir_file_paths[1]
+    return dir_name, file_name
+
+
 def get_complete_file_path(file, validate=True):
     """
     Args:
@@ -225,7 +246,11 @@ def get_complete_file_path(file, validate=True):
     if current_app.PGADMIN_RUNTIME or not current_app.config['SERVER_MODE']:
         return file if os.path.isfile(file) else None
 
-    storage_dir = get_storage_directory()
+    # get dir name and file name
+    dir_name, file = get_directory_and_file_name(file)
+
+    storage_dir = get_storage_directory(shared_storage=dir_name) if dir_name \
+        else get_storage_directory()
     if storage_dir:
         file = os.path.join(
             storage_dir,
@@ -245,12 +270,15 @@ def filename_with_file_manager_path(_file, create_file=False,
                                     skip_permission_check=False):
     """
     Args:
-        file: File name returned from client file manager
+        _file: File name returned from client file manager
         create_file: Set flag to False when file creation doesn't require
         skip_permission_check:
     Returns:
         Filename to use for backup with full path taken from preference
     """
+    # get dir name and file name
+    _dir_name, _file = get_directory_and_file_name(_file)
+
     # retrieve storage directory path
     try:
         last_storage = Preferences.module('file_manager').preference(
@@ -308,10 +336,17 @@ def does_utility_exist(file):
     :return:
     """
     error_msg = None
+
     if file is None:
         error_msg = gettext("Utility file not found. Please correct the Binary"
                             " Path in the Preferences dialog")
         return error_msg
+
+    if Path(config.STORAGE_DIR) == Path(file) or \
+            Path(config.STORAGE_DIR) in Path(file).parents:
+        error_msg = gettext("Please correct the Binary Path in the Preferences"
+                            " dialog. pgAdmin storage directory can not be a"
+                            " utility binary directory.")
 
     if not os.path.exists(file):
         error_msg = gettext("'%s' file not found. Please correct the Binary"
@@ -364,7 +399,8 @@ def get_binary_path_versions(binary_path: str) -> dict:
 
 
 def set_binary_path(binary_path, bin_paths, server_type,
-                    version_number=None, set_as_default=False):
+                    version_number=None, set_as_default=False,
+                    is_fixed_path=False):
     """
     This function is used to iterate through the utilities and set the
     default binary path.
@@ -394,6 +430,8 @@ def set_binary_path(binary_path, bin_paths, server_type,
                         if path_with_dir is not None else binary_path
                     if set_as_default:
                         path['isDefault'] = True
+                    # Whether the fixed path in the config file exists or not
+                    path['isFixed'] = is_fixed_path
                     break
             break
         except Exception:

@@ -1,4 +1,14 @@
+/////////////////////////////////////////////////////////////
+//
+// pgAdmin 4 - PostgreSQL Tools
+//
+// Copyright (C) 2013 - 2024, The pgAdmin Development Team
+// This software is released under the PostgreSQL Licence
+//
+//////////////////////////////////////////////////////////////
+
 import React from 'react';
+import { styled } from '@mui/material/styles';
 import CollectionNodeProperties from './CollectionNodeProperties';
 import ErrorBoundary from '../../static/js/helpers/ErrorBoundary';
 import withStandardTabInfo from '../../static/js/helpers/withStandardTabInfo';
@@ -6,47 +16,52 @@ import { BROWSER_PANELS } from '../../browser/static/js/constants';
 import ObjectNodeProperties from './ObjectNodeProperties';
 import EmptyPanelMessage from '../../static/js/components/EmptyPanelMessage';
 import gettext from 'sources/gettext';
-import { Box, makeStyles } from '@material-ui/core';
+import { Box } from '@mui/material';
 import { usePgAdmin } from '../../static/js/BrowserComponent';
 import PropTypes from 'prop-types';
+import _ from 'lodash';
 
-const useStyles = makeStyles((theme) => ({
-  root: {
-    height: '100%',
-    background: theme.otherVars.emptySpaceBg,
-    display: 'flex',
-    flexDirection: 'column'
-  },
+const StyledBox = styled(Box)(({theme}) => ({
+  height: '100%',
+  background: theme.otherVars.emptySpaceBg,
+  display: 'flex',
+  flexDirection: 'column'
 }));
 
 function Properties(props) {
-  const isCollection = props.nodeData?._type?.startsWith('coll-');
-  const classes = useStyles();
+  const isCollection = props.nodeData?._type?.startsWith('coll-') || props.nodeData?._type == 'dbms_job_scheduler';
   const pgAdmin = usePgAdmin();
+  let noPropertyMsg = '';
 
-  if(!props.node) {
+  if (!props.node) {
+    noPropertyMsg = gettext('Please select an object in the tree view.');
+  } else if (!_.isUndefined(props.node.hasProperties) && !props.node.hasProperties) {
+    noPropertyMsg = gettext('No information is available for the selected object.');
+  }
+
+  if(noPropertyMsg) {
     return (
-      <Box className={classes.root}>
+      <StyledBox>
         <Box margin={'4px auto'}>
-          <EmptyPanelMessage text={gettext('Please select an object in the tree view.')} />
+          <EmptyPanelMessage text={noPropertyMsg} />
         </Box>
-      </Box>
+      </StyledBox>
     );
   }
 
   if(isCollection) {
     return (
-      <Box className={classes.root}>
+      <StyledBox>
         <ErrorBoundary>
           <CollectionNodeProperties
             {...props}
           />
         </ErrorBoundary>
-      </Box>
+      </StyledBox>
     );
   } else {
     return (
-      <Box className={classes.root}>
+      <StyledBox>
         <ErrorBoundary>
           <ObjectNodeProperties
             {...props}
@@ -59,7 +74,7 @@ function Properties(props) {
             }}
           />
         </ErrorBoundary>
-      </Box>
+      </StyledBox>
     );
   }
 }

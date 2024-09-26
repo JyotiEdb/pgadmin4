@@ -7,20 +7,16 @@
 //
 //////////////////////////////////////////////////////////////
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import ReactDOMServer from 'react-dom/server';
 import PropTypes from 'prop-types';
-import gettext from 'sources/gettext';
-import { makeStyles } from '@material-ui/core';
-import { PgIconButton } from '../../Buttons';
-import { checkTrojanSource } from '../../../utils';
-import { copyToClipboard } from '../../../clipboard';
-import { useDelayedCaller } from '../../../custom_hooks';
+
+import { useIsMounted } from 'sources/custom_hooks';
+
+import { checkTrojanSource } from 'sources/utils';
 import usePreferences from '../../../../../preferences/static/js/store';
-import FileCopyRoundedIcon from '@material-ui/icons/FileCopyRounded';
-import CheckRoundedIcon from '@material-ui/icons/CheckRounded';
-import KeyboardArrowRightRoundedIcon from '@material-ui/icons/KeyboardArrowRightRounded';
-import ExpandMoreRoundedIcon from '@material-ui/icons/ExpandMoreRounded';
+import KeyboardArrowRightRoundedIcon from '@mui/icons-material/KeyboardArrowRightRounded';
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 
 // Codemirror packages
 import {
@@ -28,13 +24,14 @@ import {
   highlightSpecialChars,
   drawSelection,
   dropCursor,
+  rectangularSelection,
+  crosshairCursor,
   highlightActiveLine,
   EditorView,
   keymap,
 } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
-import { history, defaultKeymap, historyKeymap, indentLess, insertTab } from '@codemirror/commands';
-import { highlightSelectionMatches } from '@codemirror/search';
+import { history, defaultKeymap, historyKeymap, indentLess, indentMore, deleteCharBackwardStrict } from '@codemirror/commands';
 import { closeBrackets, autocompletion, closeBracketsKeymap, completionKeymap, acceptCompletion } from '@codemirror/autocomplete';
 import {
   foldGutter,
@@ -42,52 +39,23 @@ import {
   bracketMatching,
   indentUnit,
   foldKeymap,
+  indentService
 } from '@codemirror/language';
-
-import FindDialog from './FindDialog';
+import { highlightSelectionMatches } from '@codemirror/search';
 import syntaxHighlighting from '../extensions/highlighting';
 import PgSQL from '../extensions/dialect';
 import { sql } from '@codemirror/lang-sql';
+import { json } from '@codemirror/lang-json';
 import errorMarkerExtn from '../extensions/errorMarker';
 import CustomEditorView from '../CustomEditorView';
 import breakpointGutter, { breakpointEffect } from '../extensions/breakpointGutter';
 import activeLineExtn from '../extensions/activeLineMarker';
-import GotoDialog from './GotoDialog';
+import currentQueryHighlighterExtn from '../extensions/currentQueryHighlighter';
+import { autoCompleteCompartment, eolCompartment, indentNewLine, eol } from '../extensions/extraStates';
+import { OS_EOL } from '../../../../../tools/sqleditor/static/js/components/QueryToolConstants';
 
-const arrowRightHtml = ReactDOMServer.renderToString(<KeyboardArrowRightRoundedIcon style={{fontSize: '1.2em'}} />);
-const arrowDownHtml = ReactDOMServer.renderToString(<ExpandMoreRoundedIcon style={{fontSize: '1.2em'}} />);
-
-const useStyles = makeStyles(() => ({
-  copyButton: {
-    position: 'absolute',
-    zIndex: 99,
-    right: '4px',
-    top: '4px',
-  }
-}));
-
-export function CopyButton({ editor }) {
-  const classes = useStyles();
-  const [isCopied, setIsCopied] = useState(false);
-  const revertCopiedText = useDelayedCaller(() => {
-    setIsCopied(false);
-  });
-
-  return (
-    <PgIconButton size="small" className={classes.copyButton} icon={isCopied ? <CheckRoundedIcon /> : <FileCopyRoundedIcon />}
-      title={isCopied ? gettext('Copied!') : gettext('Copy')}
-      onClick={() => {
-        copyToClipboard(editor?.getValue());
-        setIsCopied(true);
-        revertCopiedText(1500);
-      }}
-    />
-  );
-}
-
-CopyButton.propTypes = {
-  editor: PropTypes.object,
-};
+const arrowRightHtml = ReactDOMServer.renderToString(<KeyboardArrowRightRoundedIcon style={{width: '16px'}} />);
+const arrowDownHtml = ReactDOMServer.renderToString(<ExpandMoreRoundedIcon style={{width: '16px'}} />);
 
 function handleDrop(e, editor) {
   let dropDetails = null;
@@ -102,9 +70,8 @@ function handleDrop(e, editor) {
     if (e.stopPropagation) {
       e.stopPropagation();
     }
-  } catch (error) {
+  } catch {
     /* if parsing fails, it must be the drag internal of codemirror text */
-    // editor.inputState.handlers.drop(e, editor);
     return false;
   }
 
@@ -133,32 +100,37 @@ function handlePaste(e) {
   checkTrojanSource(copiedText, true);
 }
 
+
+function insertTabWithUnit({ state, dispatch }) {
+  if (state.selection.ranges.some(r => !r.empty))
+    return indentMore({ state, dispatch });
+  dispatch(state.update(state.replaceSelection(state.facet(indentUnit)), { scrollIntoView: true, userEvent: 'input' }));
+  return true;
+}
+
 /* React wrapper for CodeMirror */
 const defaultExtensions = [
   highlightSpecialChars(),
   drawSelection(),
+  rectangularSelection(),
   dropCursor(),
+  crosshairCursor(),
   EditorState.allowMultipleSelections.of(true),
   indentOnInput(),
   syntaxHighlighting,
-  highlightSelectionMatches(),
-  keymap.of([defaultKeymap, closeBracketsKeymap, historyKeymap, foldKeymap, completionKeymap].flat()),
   keymap.of([{
     key: 'Tab',
     preventDefault: true,
-    run: insertTab,
-  },
-  {
-    key: 'Shift-Tab',
-    preventDefault: true,
-    run: indentLess,
+    run: insertTabWithUnit,
+    shift: indentLess,
   },{
     key: 'Tab',
     run: acceptCompletion,
+  },{
+    key: 'Backspace',
+    preventDefault: true,
+    run: deleteCharBackwardStrict,
   }]),
-  sql({
-    dialect: PgSQL,
-  }),
   PgSQL.language.data.of({
     autocomplete: false,
   }),
@@ -166,16 +138,29 @@ const defaultExtensions = [
     drop: handleDrop,
     paste: handlePaste,
   }),
-  errorMarkerExtn()
+  errorMarkerExtn(),
+  indentService.of((context, pos) => {
+    if(context.state.facet(indentNewLine)) {
+      const previousLine = context.lineAt(pos, -1);
+      let prevText = previousLine.text.replaceAll('\t', ' '.repeat(context.state.tabSize));
+      return prevText.match(/^\s*/)?.[0].length;
+    }
+    return 0;
+  }),
+  autoCompleteCompartment.of([]),
+  EditorView.clipboardOutputFilter.of((text, state)=>{
+    const lineSep = state.facet(eol);
+    return state.doc.sliceString(0, text.length, lineSep);
+  })
 ];
 
 export default function Editor({
-  currEditor, name, value, options, onCursorActivity, onChange, readonly, disabled, autocomplete = false,
-  breakpoint = false, onBreakPointChange, showActiveLine=false, showCopyBtn = false,
-  keepHistory = true, cid, helpid, labelledBy}) {
-  const [[showFind, isReplace], setShowFind] = useState([false, false]);
-  const [showGoto, setShowGoto] = useState(false);
-  const [showCopy, setShowCopy] = useState(false);
+  currEditor, name, value, options, onCursorActivity, onChange, readonly,
+  disabled, autocomplete = false, breakpoint = false, onBreakPointChange,
+  showActiveLine=false, keepHistory = true, cid, helpid, labelledBy,
+  customKeyMap, language='pgsql'
+}) {
+  const checkIsMounted = useIsMounted();
 
   const editorContainerRef = useRef();
   const editor = useRef();
@@ -186,34 +171,17 @@ export default function Editor({
 
   const preferencesStore = usePreferences();
   const editable = !disabled;
+
+  const shortcuts = useRef(new Compartment());
   const configurables = useRef(new Compartment());
   const editableConfig = useRef(new Compartment());
 
-  const editMenuKeyMap = [{
-    key: 'Mod-f', run: (view, e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setShowFind([false, false]);
-      setShowFind([true, false]);
-    }
-  }, {
-    key: 'Mod-Alt-f', run: (view, e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setShowFind([false, false]);
-      setShowFind([true, true]);
-    },
-  }, {
-    key: 'Mod-l', run: (view, e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setShowGoto(true);
-    },
-  }];
-
   useEffect(() => {
+    if (!checkIsMounted()) return;
     const finalOptions = { ...defaultOptions, ...options };
+    const osEOL = OS_EOL === 'crlf' ? '\r\n' : '\n'; 
     const finalExtns = [
+      (language == 'json') ? json() : sql({dialect: PgSQL}),
       ...defaultExtensions,
     ];
     if (finalOptions.lineNumbers) {
@@ -229,15 +197,16 @@ export default function Editor({
             icon.innerHTML = arrowRightHtml;
           }
           return icon;
-        }
+        },
       }));
     }
     if (editorContainerRef.current) {
       const state = EditorState.create({
         extensions: [
           ...finalExtns,
+          eolCompartment.of([eol.of(osEOL)]),
+          shortcuts.current.of([]),
           configurables.current.of([]),
-          keymap.of(editMenuKeyMap),
           editableConfig.current.of([
             EditorView.editable.of(!disabled),
             EditorState.readOnly.of(readonly),
@@ -293,6 +262,7 @@ export default function Editor({
   }, []);
 
   useMemo(() => {
+    if (!checkIsMounted()) return;
     if(editor.current) {
       if(value != editor.current.getValue()) {
         if(!_.isEmpty(value)) {
@@ -305,6 +275,18 @@ export default function Editor({
   }, [value]);
 
   useEffect(() => {
+    if (!checkIsMounted()) return;
+    const keys = keymap.of([
+      customKeyMap??[], defaultKeymap, closeBracketsKeymap, historyKeymap,
+      foldKeymap, completionKeymap
+    ].flat());
+    editor.current?.dispatch({
+      effects: shortcuts.current.reconfigure(keys)
+    });
+  }, [customKeyMap]);
+
+  useEffect(() => {
+    if (!checkIsMounted()) return;
     let pref = preferencesStore.getPreferencesForModule('sqleditor');
     let newConfigExtn = [];
 
@@ -358,12 +340,18 @@ export default function Editor({
     );
     if (pref.use_spaces) {
       newConfigExtn.push(
-        indentUnit.of(new Array(pref.tab_size).fill(' ').join('')),
+        indentUnit.of(' '.repeat(pref.tab_size)),
       );
     } else {
       newConfigExtn.push(
         indentUnit.of('\t'),
       );
+    }
+
+    if(pref.indent_new_line) {
+      newConfigExtn.push(indentNewLine.of(true));
+    } else {
+      newConfigExtn.push(indentNewLine.of(false));
     }
 
     if (pref.wrap_code) {
@@ -375,8 +363,16 @@ export default function Editor({
     if (pref.insert_pair_brackets) {
       newConfigExtn.push(closeBrackets());
     }
+
+    if (pref.highlight_selection_matches){
+      newConfigExtn.push(highlightSelectionMatches());
+    }
+
     if (pref.brace_matching) {
       newConfigExtn.push(bracketMatching());
+    }
+    if (pref.underline_query_cursor){
+      newConfigExtn.push(currentQueryHighlighterExtn());
     }
 
     editor.current.dispatch({
@@ -385,6 +381,7 @@ export default function Editor({
   }, [preferencesStore]);
 
   useMemo(() => {
+    if (!checkIsMounted()) return;
     if (editor.current) {
       if (value != editor.current.getValue()) {
         editor.current.dispatch({
@@ -395,6 +392,7 @@ export default function Editor({
   }, [value]);
 
   useEffect(() => {
+    if (!checkIsMounted()) return;
     editor.current?.dispatch({
       effects: editableConfig.current.reconfigure([
         EditorView.editable.of(editable),
@@ -403,27 +401,9 @@ export default function Editor({
     });
   }, [readonly, disabled, keepHistory]);
 
-  const closeFind = () => {
-    setShowFind([false, false]);
-    editor.current?.focus();
-  };
-
-  const closeGoto = () => {
-    setShowGoto(false);
-    editor.current?.focus();
-  };
-
-  const onMouseEnter = useCallback(()=>{showCopyBtn && setShowCopy(true);});
-  const onMouseLeave = useCallback(()=>{showCopyBtn && setShowCopy(false);});
-
-  return (
-    <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} style={{height: '100%'}}>
-      <div style={{ height: '100%' }} ref={editorContainerRef} name={name}></div>
-      {showCopy && <CopyButton editor={editor.current} />}
-      <FindDialog editor={editor.current} show={showFind} replace={isReplace} onClose={closeFind} />
-      <GotoDialog editor={editor.current} show={showGoto} onClose={closeGoto} />
-    </div>
-  );
+  return useMemo(() => (
+    <div style={{ height: '100%' }} ref={editorContainerRef} name={name}></div>
+  ), []);
 }
 
 Editor.propTypes = {
@@ -444,4 +424,6 @@ Editor.propTypes = {
   cid: PropTypes.string,
   helpid: PropTypes.string,
   labelledBy: PropTypes.string,
+  customKeyMap: PropTypes.array,
+  language: PropTypes.string,
 };

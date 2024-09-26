@@ -14,7 +14,7 @@ import { usePgAdmin } from '../../../static/js/BrowserComponent';
 import ErrorBoundary from './ErrorBoundary';
 
 export default function withStandardTabInfo(Component, tabId) {
-  // eslint-disable-next-line react/display-name
+   
   const HOCComponent = (props)=>{
     const [[isStale, nodeItem, nodeData], setNodeInfo] = useState([true, undefined, undefined]);
     const pgAdmin = usePgAdmin();
@@ -23,7 +23,7 @@ export default function withStandardTabInfo(Component, tabId) {
     const [isActive, setIsActive] = React.useState(false);
     const layoutDocker = useContext(LayoutDockerContext);
 
-    useEffect(()=>{
+    useEffect(() => {
       const i = pgAdmin.Browser.tree?.selected();
       if(i) {
         setNodeInfo([true, i, pgAdmin.Browser.tree.itemData(i)]);
@@ -38,22 +38,26 @@ export default function withStandardTabInfo(Component, tabId) {
         }
       }, 100);
 
-      const onUpdate =  (item, data)=>{
-        setNodeInfo([true, item, data]);
+      const onUpdate =  () => {
+        // Only use the selected tree node item.
+        const item = pgAdmin.Browser.tree?.selected();
+        setNodeInfo([
+          true, item, item && pgAdmin.Browser.tree.itemData(item)
+        ]);
       };
 
+      let destroyTree = pgAdmin.Browser.Events.on('pgadmin-browser:tree:destroyed', onUpdate);
       let deregisterTree = pgAdmin.Browser.Events.on('pgadmin-browser:node:selected', onUpdate);
       let deregisterTreeUpdate = pgAdmin.Browser.Events.on('pgadmin-browser:tree:updated', onUpdate);
       let deregisterDbConnected = pgAdmin.Browser.Events.on('pgadmin:database:connected', onUpdate);
-      let deregisterServerConnected = pgAdmin.Browser.Events.on('pgadmin:server:connected', (_sid, item, data)=>{
-        setNodeInfo([true, item, data]);
-      });
+      let deregisterServerConnected = pgAdmin.Browser.Events.on('pgadmin:server:connected', onUpdate);
       let deregisterActive = layoutDocker.eventBus.registerListener(LAYOUT_EVENTS.ACTIVE, onTabActive);
       // if there is any dock changes to the tab and it appears to be active/inactive
       let deregisterChange = layoutDocker.eventBus.registerListener(LAYOUT_EVENTS.CHANGE, onTabActive);
 
-      return ()=>{
+      return () => {
         onTabActive?.cancel();
+        destroyTree();
         deregisterTree();
         deregisterTreeUpdate();
         deregisterDbConnected();
@@ -63,13 +67,23 @@ export default function withStandardTabInfo(Component, tabId) {
       };
     }, []);
 
+    ////////
+    // Special case:
+    //
+    // When the tree is being recreated during reloading on changes of some
+    // preferences, it is possible that the tree returns 'selected' node, but -
+    // it does not have the 'treeNodeInfo' as it was actually part of the
+    // previous instance of the tree.
+    //
+    // In that case - we consider that there is no node selected in the tree.
+    ///////
     return (
       <ErrorBoundary>
         <Component
           {...props}
-          nodeItem={nodeItem}
-          nodeData={nodeData}
-          node={node}
+          nodeItem={treeNodeInfo ? nodeItem : undefined}
+          nodeData={treeNodeInfo ? nodeData : undefined}
+          node={treeNodeInfo ? node : undefined}
           treeNodeInfo={treeNodeInfo}
           isActive={isActive}
           isStale={isStale}

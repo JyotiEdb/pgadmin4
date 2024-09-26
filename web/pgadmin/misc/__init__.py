@@ -13,13 +13,13 @@ from pgadmin.utils import driver
 from flask import render_template, Response, request, current_app
 from flask.helpers import url_for
 from flask_babel import gettext
-from flask_security import login_required
+from pgadmin.user_login_check import pga_login_required
+from pathlib import Path
 from pgadmin.utils import PgAdminModule, replace_binary_path, \
     get_binary_path_versions
 from pgadmin.utils.csrf import pgCSRFProtect
 from pgadmin.utils.session import cleanup_session_files
 from pgadmin.misc.themes import get_all_themes
-from pgadmin.utils.constants import MIMETYPE_APP_JS, UTILITIES_ARRAY
 from pgadmin.utils.ajax import precondition_required, make_json_response, \
     internal_server_error
 from pgadmin.utils.heartbeat import log_server_heartbeat, \
@@ -70,23 +70,22 @@ class MiscModule(PgAdminModule):
                 .replace('-', ' ')
                 .title(),
                 'value': theme,
-                'preview_src': url_for(
-                    'static', filename='js/generated/img/' +
-                                       theme_data['preview_img']
-                )
+                'preview_src': 'js/generated/img/' + theme_data['preview_img']
+                if 'preview_img' in theme_data else None
             })
 
         self.preference.register(
             'themes', 'theme',
-            gettext("Theme"), 'options', 'standard',
+            gettext("Theme"), 'options', 'light',
             category_label=gettext('Themes'),
             options=theme_options,
             control_props={
                 'allowClear': False,
+                'creatable': False,
             },
             help_str=gettext(
-                'A refresh is required to apply the theme. Above is the '
-                'preview of the theme'
+                'Click the save button to apply the theme. Below is the '
+                'preview of the theme.'
             )
         )
 
@@ -220,7 +219,7 @@ def shutdown():
 @blueprint.route("/validate_binary_path",
                  endpoint="validate_binary_path",
                  methods=["POST"])
-@login_required
+@pga_login_required
 def validate_binary_path():
     """
     This function is used to validate the specified utilities path by
@@ -234,7 +233,11 @@ def validate_binary_path():
         data = json.loads(data)
 
     version_str = ''
-    if 'utility_path' in data and data['utility_path'] is not None:
+
+    # Do not allow storage dir as utility path
+    if 'utility_path' in data and data['utility_path'] is not None and \
+        Path(config.STORAGE_DIR) != Path(data['utility_path']) and \
+            Path(config.STORAGE_DIR) not in Path(data['utility_path']).parents:
         binary_versions = get_binary_path_versions(data['utility_path'])
         for utility, version in binary_versions.items():
             if version is None:
@@ -248,8 +251,9 @@ def validate_binary_path():
     return make_json_response(data=gettext(version_str), status=200)
 
 
-@blueprint.route("/upgrade_check", endpoint="upgrade_check", methods=['GET'])
-@login_required
+@blueprint.route("/upgrade_check", endpoint="upgrade_check",
+                 methods=['GET'])
+@pga_login_required
 def upgrade_check():
     # Get the current version info from the website, and flash a message if
     # the user is out of date, and the check is enabled.

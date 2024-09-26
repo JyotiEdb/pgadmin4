@@ -155,8 +155,22 @@ class PgadminPage:
         self.click_element(self.find_by_css_selector(
             "li[data-label='Query Tool']"))
 
-        self.wait_for_element_to_be_visible(
-            self.driver, "//div[@id='btn-conn-status']", 5)
+        self.driver.switch_to.default_content()
+        WebDriverWait(self.driver, 10).until(
+            EC.frame_to_be_available_and_switch_to_it(
+                (By.TAG_NAME, "iframe")))
+
+        WebDriverWait(self.driver, self.timeout).until(
+            EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, QueryToolLocators.btn_execute_query_css)
+            ), "Timed out waiting for execute query button to appear"
+        )
+
+        # Need to add this as by default tool tip is shown for file
+        ActionChains(self.driver).move_to_element(
+            self.driver.find_element(
+                By.CSS_SELECTOR,
+                QueryToolLocators.btn_execute_query_css)).perform()
 
     def open_view_data(self, table_name):
         self.click_element(self.find_by_css_selector(
@@ -268,6 +282,7 @@ class PgadminPage:
                 option_set_as_required = True
                 break
             else:
+                self.driver.implicitly_wait(2)
                 menu_option.click()
                 time.sleep(0.2)
                 if menu_option.get_attribute('data-checked') == is_selected:
@@ -836,23 +851,25 @@ class PgadminPage:
         self.driver.execute_script(
             "arguments[0].dispatchEvent(new Event('blur'));", field)
 
-    def fill_input(self, field, field_content, input_keys=False,
-                   key_after_input=Keys.ARROW_DOWN):
-        try:
-            attempt = 0
-            for attempt in range(0, 3):
+    def fill_input(
+        self, field, field_content, input_keys=False,
+        key_after_input=Keys.ARROW_DOWN
+    ):
+        for attempt in range(0, 3):
+            try:
                 field.click()
                 break
-        except Exception as e:
-            time.sleep(.2)
-            if attempt == 2:
-                raise e
+            except Exception as e:
+                time.sleep(.2)
+                if attempt == 2:
+                    raise e
+
         # Use send keys if input_keys true, else use javascript to set content
         if input_keys:
-            backspaces = [Keys.BACKSPACE] * len(field.get_attribute('value'))
-            field.send_keys(backspaces)
-            field.send_keys(str(field_content))
-            # self.wait_for_input_by_element(field, field_content)
+            # Clear the existing content first
+            self.clear_edit_box(field)
+            # Send the keys one by one.
+            [field.send_keys(c) for c in str(field_content)]
         else:
             self.driver.execute_script("arguments[0].value = arguments[1]",
                                        field, field_content)
@@ -898,9 +915,7 @@ class PgadminPage:
                     return element
             except (NoSuchElementException, WebDriverException):
                 return False
-
         time.sleep(1)
-        # self.wait_for_query_tool_loading_indicator_to_disappear(12)
 
         retry = 2
         while retry > 0:
@@ -909,9 +924,7 @@ class PgadminPage:
                 WebDriverWait(self.driver, 10).until(
                     EC.frame_to_be_available_and_switch_to_it(
                         (By.TAG_NAME, "iframe")))
-                self.find_by_css_selector(
-                    "div.dock-tab-btn[id$=\"id-query\"]").click()
-                # self.find_by_xpath("//div[text()='Query Editor']").click()
+                self.find_by_xpath("//span[text()='Query']").click()
 
                 codemirror_ele = WebDriverWait(
                     self.driver, timeout=self.timeout, poll_frequency=0.01) \
@@ -936,7 +949,7 @@ class PgadminPage:
             self.driver.execute_script(
                 "arguments[0].cmView.view.setValue(arguments[1]);"
                 "arguments[0].cmView.view.setCursor("
-                "arguments[0].cmView.view.lineCount(),0);",
+                "arguments[0].cmView.view.lineCount(),-1);",
                 codemirror_ele, field_content)
 
     def click_tab(self, tab_name):
@@ -1134,29 +1147,39 @@ class PgadminPage:
                     bottom_ele = self.driver.find_element(
                         By.XPATH,
                         "//div[@id='id-object-explorer']"
-                        "/div/div/div/div/div[last()]")
-                    bottom_ele_location = int(
-                        bottom_ele.value_of_css_property('top').split("px")[0])
+                        "/div/div/div/div/div/div[last()]")
+                    bottom_ele_top = bottom_ele.value_of_css_property('top')
+                    bottom_ele_location = 1
+
+                    if (bottom_ele_top != 'auto'):
+                        bottom_ele_location = int(
+                            bottom_ele_top.split("px")[0]
+                        )
 
                     if tree_height - bottom_ele_location < 25:
-                        f_scroll = 0
+                        f_scroll = bottom_ele_location - 25
                     else:
                         self.driver.execute_script(
-                            self.js_executor_scrollintoview_arg, bottom_ele)
+                            self.js_executor_scrollintoview_arg, bottom_ele
+                        )
                         f_scroll -= 1
                 elif r_scroll > 0:
                     top_el = self.driver.find_element(
                         By.XPATH,
                         "//div[@id='id-object-explorer']"
                         "/div/div/div/div/div[1]")
-                    top_el_location = int(
-                        top_el.value_of_css_property('top').split("px")[0])
+                    top_el_top = top_el.value_of_css_property('top')
+                    top_el_location = 0
+
+                    if (top_el_top != 'auto'):
+                        top_el_location = int(top_el_top.split("px")[0])
 
                     if (tree_height - top_el_location) == tree_height:
                         r_scroll = 0
                     else:
-                        webdriver.ActionChains(self.driver).move_to_element(
-                            top_el).perform()
+                        self.driver.execute_script(
+                            self.js_executor_scrollintoview_arg, top_el
+                        )
                         r_scroll -= 1
                 else:
                     break

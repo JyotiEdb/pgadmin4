@@ -128,9 +128,6 @@ PSYCOPG_SUPPORTED_MULTIRANGE_ARRAY_TYPES = (6155, 6150, 6157, 6151, 6152, 6153)
 
 
 def register_global_typecasters():
-    # This registers a unicode type caster for datatype 'RECORD'.
-    psycopg.adapters.register_loader(
-        2249, TextLoaderpgAdmin)
     # This registers a unicode type caster for datatype 'RECORD_ARRAY'.
     psycopg.adapters.register_loader(
         2287, TextLoaderpgAdmin)
@@ -174,10 +171,10 @@ def register_binary_typecasters(connection):
     # The new classes can be registered globally, on a connection, on a cursor
 
     connection.adapters.register_loader(17,
-                                        pgAdminByteaLoader)
+                                        ByteaLoader)
 
     connection.adapters.register_loader(1001,
-                                        pgAdminByteaLoader)
+                                        ByteaLoader)
 
 
 def register_array_to_string_typecasters(connection=None):
@@ -194,7 +191,7 @@ def register_array_to_string_typecasters(connection=None):
                                                 TextLoaderpgAdmin)
 
 
-class pgAdminInetLoader(InetLoader):
+class InetLoader(InetLoader):
     def load(self, data):
         if isinstance(data, memoryview):
             data = bytes(data)
@@ -206,11 +203,11 @@ class pgAdminInetLoader(InetLoader):
 
 
 # The new classes can be registered globally, on a connection, on a cursor
-psycopg.adapters.register_loader("inet", pgAdminInetLoader)
-psycopg.adapters.register_loader("cidr", pgAdminInetLoader)
+psycopg.adapters.register_loader("inet", InetLoader)
+psycopg.adapters.register_loader("cidr", InetLoader)
 
 
-class pgAdminByteaLoader(Loader):
+class ByteaLoader(Loader):
     def load(self, data):
         return 'binary data' if data is not None else None
 

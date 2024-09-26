@@ -7,41 +7,79 @@
 //
 //////////////////////////////////////////////////////////////
 import React, {useContext, useCallback, useEffect, useState} from 'react';
-import { makeStyles } from '@material-ui/styles';
-import { Box } from '@material-ui/core';
+import { styled } from '@mui/material/styles';
+import { Portal } from '@mui/material';
 import { PgButtonGroup, PgIconButton } from '../../../../../../static/js/components/Buttons';
-import KeyboardArrowDownIcon from '@material-ui/icons/KeyboardArrowDown';
-import PlaylistAddRoundedIcon from '@material-ui/icons/PlaylistAddRounded';
-import FileCopyRoundedIcon from '@material-ui/icons/FileCopyRounded';
-import DeleteRoundedIcon from '@material-ui/icons/DeleteRounded';
-import TimelineRoundedIcon from '@material-ui/icons/TimelineRounded';
-import { PasteIcon, SaveDataIcon } from '../../../../../../static/js/components/ExternalIcon';
-import GetAppRoundedIcon from '@material-ui/icons/GetAppRounded';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import PlaylistAddRoundedIcon from '@mui/icons-material/PlaylistAddRounded';
+import FileCopyRoundedIcon from '@mui/icons-material/FileCopyRounded';
+import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
+import TimelineRoundedIcon from '@mui/icons-material/TimelineRounded';
+import { PasteIcon, SQLQueryIcon, SaveDataIcon } from '../../../../../../static/js/components/ExternalIcon';
+import GetAppRoundedIcon from '@mui/icons-material/GetAppRounded';
 import {QUERY_TOOL_EVENTS} from '../QueryToolConstants';
 import { QueryToolContext, QueryToolEventsContext } from '../QueryToolComponent';
 import { PgMenu, PgMenuItem } from '../../../../../../static/js/components/Menu';
 import gettext from 'sources/gettext';
 import { useKeyboardShortcuts } from '../../../../../../static/js/custom_hooks';
-import {shortcut_key} from 'sources/keyboard_shortcuts';
 import CopyData from '../QueryToolDataGrid/CopyData';
 import PropTypes from 'prop-types';
+import CodeMirror from '../../../../../../static/js/components/ReactCodeMirror';
+import { setEditorPosition } from '../QueryToolDataGrid/Editors';
 
-const useStyles = makeStyles((theme)=>({
-  root: {
-    padding: '2px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    backgroundColor: theme.otherVars.editorToolbarBg,
-    ...theme.mixins.panelBorder.bottom,
-  },
+const StyledDiv = styled('div')(({theme})=>({
+  padding: '2px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
+  backgroundColor: theme.otherVars.editorToolbarBg,
+  ...theme.mixins.panelBorder.bottom,
 }));
 
-export function ResultSetToolbar({canEdit, totalRowCount}) {
-  const classes = useStyles();
+const StyledEditor = styled('div')(({theme})=>({
+  position: 'absolute',
+  backgroundColor: theme.palette.background.default,
+  fontSize: '12px',
+  ...theme.mixins.panelBorder.all,
+  maxWidth:'50%',
+  overflow:'auto',
+  maxHeight:'35%',
+  '& .textarea': {
+    border: 0,
+    outline: 0,
+    resize: 'both',
+  }
+}));
+
+function ShowDataOutputQueryPopup({query}) {
+  function suppressEnterKey(e) {
+    if(e.keyCode == 13) {
+      e.stopPropagation();
+    }
+  }
+
+  return (
+    <Portal container={document.body}>
+      <StyledEditor ref={(ele)=>{
+        setEditorPosition(document.getElementById('sql-query'), ele, '.MuiBox-root', 29);
+      }} onKeyDown={suppressEnterKey}>
+        <CodeMirror
+          value={query || ''}
+          className={'textarea'}
+          readonly={true}
+        />
+      </StyledEditor>
+    </Portal>
+  );
+}
+ShowDataOutputQueryPopup.propTypes = {
+  query: PropTypes.string,
+};
+
+export function ResultSetToolbar({query,canEdit, totalRowCount}) {
   const eventBus = useContext(QueryToolEventsContext);
   const queryToolCtx = useContext(QueryToolContext);
-
+  const [dataOutputQueryBtn,setDataOutputQueryBtn] = useState(false);
   const [buttonsDisabled, setButtonsDisabled] = useState({
     'save-data': true,
     'delete-rows': true,
@@ -104,6 +142,7 @@ export function ResultSetToolbar({canEdit, totalRowCount}) {
     });
   }, []);
 
+
   useEffect(()=>{
     eventBus.registerListener(QUERY_TOOL_EVENTS.DATAGRID_CHANGED, (isDirty)=>{
       setDisableButton('save-data', !isDirty);
@@ -138,6 +177,24 @@ export function ResultSetToolbar({canEdit, totalRowCount}) {
 
   useKeyboardShortcuts([
     {
+      shortcut: queryToolPref.btn_add_row,
+      options: {
+        callback: ()=>{canEdit && addRow();}
+      }
+    },
+    {
+      shortcut: queryToolPref.btn_paste_row,
+      options: {
+        callback: ()=>{canEdit && pasteRows();}
+      }
+    },
+    {
+      shortcut: queryToolPref.btn_delete_row,
+      options: {
+        callback: ()=>{!(buttonsDisabled['delete-rows'] || !canEdit) && deleteRows();}
+      }
+    },
+    {
       shortcut: queryToolPref.save_data,
       options: {
         callback: ()=>{saveData();}
@@ -153,20 +210,20 @@ export function ResultSetToolbar({canEdit, totalRowCount}) {
 
   return (
     <>
-      <Box className={classes.root}>
+      <StyledDiv>
         <PgButtonGroup size="small">
           <PgIconButton title={gettext('Add row')} icon={<PlaylistAddRoundedIcon style={{height: 'unset'}}/>}
-            accesskey={shortcut_key(queryToolPref.btn_add_row)} disabled={!canEdit} onClick={addRow} />
+            shortcut={queryToolPref.btn_add_row} disabled={!canEdit} onClick={addRow} />
           <PgIconButton title={gettext('Copy')} icon={<FileCopyRoundedIcon />}
             shortcut={FIXED_PREF.copy} disabled={buttonsDisabled['copy-rows']} onClick={copyData} />
           <PgIconButton title={gettext('Copy options')} icon={<KeyboardArrowDownIcon />} splitButton
             name="menu-copyheader" ref={copyMenuRef} onClick={openMenu} />
           <PgIconButton title={gettext('Paste')} icon={<PasteIcon />}
-            accesskey={shortcut_key(queryToolPref.btn_paste_row)} disabled={!canEdit} onClick={pasteRows} />
+            shortcut={queryToolPref.btn_paste_row} disabled={!canEdit} onClick={pasteRows} />
           <PgIconButton title={gettext('Paste options')} icon={<KeyboardArrowDownIcon />} splitButton
             name="menu-pasteoptions" ref={pasetMenuRef} onClick={openMenu} />
           <PgIconButton title={gettext('Delete')} icon={<DeleteRoundedIcon />}
-            accesskey={shortcut_key(queryToolPref.btn_delete_row)} disabled={buttonsDisabled['delete-rows'] || !canEdit} onClick={deleteRows} />
+            shortcut={queryToolPref.btn_delete_row} disabled={buttonsDisabled['delete-rows'] || !canEdit} onClick={deleteRows} />
         </PgButtonGroup>
         <PgButtonGroup size="small">
           <PgIconButton title={gettext('Save Data Changes')} icon={<SaveDataIcon />}
@@ -181,7 +238,16 @@ export function ResultSetToolbar({canEdit, totalRowCount}) {
           <PgIconButton title={gettext('Graph Visualiser')} icon={<TimelineRoundedIcon />}
             onClick={showGraphVisualiser} disabled={buttonsDisabled['save-result']} />
         </PgButtonGroup>
-      </Box>
+        {query &&
+        <>
+          <PgButtonGroup size="small">
+            <PgIconButton title={gettext('SQL query of data')} icon={<SQLQueryIcon />}
+              onClick={()=>{setDataOutputQueryBtn(prev=>!prev);}} onBlur={()=>{setDataOutputQueryBtn(false);}} disabled={!query} id='sql-query'/>
+          </PgButtonGroup>
+          { dataOutputQueryBtn && <ShowDataOutputQueryPopup query={query} />}
+        </>
+        }
+      </StyledDiv>
       <PgMenu
         anchorRef={copyMenuRef}
         open={menuOpenId=='menu-copyheader'}
@@ -203,6 +269,7 @@ export function ResultSetToolbar({canEdit, totalRowCount}) {
 }
 
 ResultSetToolbar.propTypes = {
+  query: PropTypes.string,
   canEdit: PropTypes.bool,
   totalRowCount: PropTypes.number,
 };

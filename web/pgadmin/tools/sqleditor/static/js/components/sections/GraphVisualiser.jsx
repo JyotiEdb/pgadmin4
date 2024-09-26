@@ -8,65 +8,65 @@
 //////////////////////////////////////////////////////////////
 
 import _ from 'lodash';
+import { styled } from '@mui/material/styles';
 import React, { useContext, useState, useMemo, useEffect } from 'react';
 import gettext from 'sources/gettext';
 import PropTypes from 'prop-types';
 import url_for from 'sources/url_for';
 import Loader from 'sources/components/Loader';
-import { makeStyles } from '@material-ui/styles';
-import { Box } from '@material-ui/core';
-import ShowChartRoundedIcon from '@material-ui/icons/ShowChartRounded';
-import ZoomOutMapIcon from '@material-ui/icons/ZoomOutMap';
-import SaveAltIcon from '@material-ui/icons/SaveAlt';
-import ExpandLessRoundedIcon from '@material-ui/icons/ExpandLessRounded';
-import ExpandMoreRoundedIcon from '@material-ui/icons/ExpandMoreRounded';
+import { Box, useTheme } from '@mui/material';
+import ShowChartRoundedIcon from '@mui/icons-material/ShowChartRounded';
+import ZoomOutMapIcon from '@mui/icons-material/ZoomOutMap';
+import SaveAltIcon from '@mui/icons-material/SaveAlt';
+import ExpandLessRoundedIcon from '@mui/icons-material/ExpandLessRounded';
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import { InputSelect } from '../../../../../../static/js/components/FormComponents';
 import { DefaultButton, PgButtonGroup, PgIconButton} from '../../../../../../static/js/components/Buttons';
 import { LineChart, BarChart, PieChart, DATA_POINT_STYLE, DATA_POINT_SIZE,
-  CHART_THEME_COLORS, CHART_THEME_COLORS_LENGTH, LightenDarkenColor} from 'sources/chartjs';
+  LightenDarkenColor} from 'sources/chartjs';
 import { QueryToolEventsContext, QueryToolContext } from '../QueryToolComponent';
 import { QUERY_TOOL_EVENTS, PANELS } from '../QueryToolConstants';
+import { getChartColor } from '../../../../../../static/js/utils';
 
-// Numeric data type used to separate out the options for Y axis.
-const NUMERIC_TYPES = ['oid', 'smallint', 'integer', 'bigint', 'decimal', 'numeric',
-  'real', 'double precision', 'smallserial', 'serial', 'bigserial'];
-
-const useStyles = makeStyles((theme)=>({
-  mainContainer: {
-    width: '100%',
-    height: '100%',
-    overflowY: 'scroll',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  topContainer: {
+const StyledBox = styled(Box)(({theme}) => ({
+  width: '100%',
+  height: '100%',
+  overflowY: 'scroll',
+  display: 'flex',
+  flexDirection: 'column',
+  '& .GraphVisualiser-topContainer': {
     alignItems: 'flex-start',
     padding: '4px',
     backgroundColor: theme.otherVars.editorToolbarBg,
     flexWrap: 'wrap',
     ...theme.mixins.panelBorder.bottom,
+    '& .GraphVisualiser-displayFlex': {
+      display: 'flex',
+      '& .GraphVisualiser-spanLabel': {
+        alignSelf: 'center',
+        minWidth: '6%',
+        whiteSpace: 'nowrap',
+        '& .GraphVisualiser-axisSelectCtrl': {
+          minWidth: '200px',
+          marginTop: '2px',
+        },
+        '& .GraphVisualiser-selectCtrl': {
+          minWidth: '200px',
+        },
+
+      },
+    },
   },
-  displayFlex: {
-    display: 'flex',
-  },
-  graphContainer: {
+  '& .GraphVisualiser-graphContainer': {
     padding: '8px',
     flexGrow: 1,
     overflow: 'hidden',
   },
-  spanLabel: {
-    alignSelf: 'center',
-    minWidth: '6%',
-    whiteSpace: 'nowrap',
-  },
-  selectCtrl: {
-    minWidth: '200px',
-  },
-  axisSelectCtrl: {
-    minWidth: '200px',
-    marginTop: '2px',
-  },
 }));
+
+// Numeric data type used to separate out the options for Y axis.
+const NUMERIC_TYPES = ['oid', 'smallint', 'integer', 'bigint', 'decimal', 'numeric',
+  'real', 'double precision', 'smallserial', 'serial', 'bigserial'];
 
 // This function is used to generate the appropriate graph based on the graphType.
 function GenerateGraph({graphType, graphData, ...props}) {
@@ -128,7 +128,7 @@ function GenerateGraph({graphType, graphData, ...props}) {
     plugins: {
       legend: {
         labels: {
-          usePointStyle: (showDataPoints && useDiffPointStyle) ? true : false
+          usePointStyle: (showDataPoints && useDiffPointStyle)
         },
       },
     },
@@ -162,7 +162,7 @@ GenerateGraph.propTypes = {
 };
 
 // This function is used to get the dataset for Line Chart and Stacked Line Chart.
-function getLineChartData(graphType, rows, colName, colPosition, color, colorIndex, styleIndex, queryToolCtx) {
+function getLineChartData(graphType, rows, colName, colPosition, color, styleIndex, queryToolCtx) {
   return {
     label: colName,
     data: rows.map((r)=>r[colPosition]),
@@ -186,29 +186,24 @@ function getBarChartData(rows, colName, colPosition, color) {
 }
 
 // This function is used to get the dataset for Pie Chart.
-function getPieChartData(rows, colName, colPosition, queryToolCtx) {
-  let rowCount = -1;
+function getPieChartData(rows, colName, colPosition, theme) {
   return {
     label: colName,
     data: rows.map((r)=>r[colPosition]),
-    backgroundColor: rows.map(()=> {
-      if (rowCount >= (CHART_THEME_COLORS_LENGTH - 1)) {
-        rowCount = -1;
-      }
-      rowCount = rowCount + 1;
-      return CHART_THEME_COLORS[queryToolCtx.preferences.misc.theme][rowCount];
+    backgroundColor: rows.map((_v, i)=> {
+      return getChartColor(i, theme);
     }),
   };
 }
 
 // This function is used to get the graph data set for the X axis and Y axis
-function getGraphDataSet(graphType, rows, columns, xaxis, yaxis, queryToolCtx) {
+function getGraphDataSet(graphType, rows, columns, xaxis, yaxis, queryToolCtx, theme) {
   // Function is used to the find the position of the column
   function getColumnPosition(colName) {
     return _.find(columns, (c)=>(c.name==colName))?.pos;
   }
 
-  let styleIndex = -1, colorIndex = -1;
+  let styleIndex = -1;
 
   return {
     'labels': rows.map((r, index)=>{
@@ -220,14 +215,8 @@ function getGraphDataSet(graphType, rows, columns, xaxis, yaxis, queryToolCtx) {
       return r[colPosition];
     }),
 
-    'datasets': yaxis.map((colName)=>{
-      // Loop is used to set the index for random color array
-      if (colorIndex >= (CHART_THEME_COLORS_LENGTH - 1)) {
-        colorIndex = -1;
-      }
-      colorIndex = colorIndex + 1;
-
-      let color = CHART_THEME_COLORS[queryToolCtx.preferences.misc.theme][colorIndex];
+    'datasets': yaxis.map((colName, i)=>{
+      let color = getChartColor(i, theme);
       let colPosition = getColumnPosition(colName);
 
       // Loop is used to set the index for DATA_POINT_STYLE array
@@ -237,31 +226,31 @@ function getGraphDataSet(graphType, rows, columns, xaxis, yaxis, queryToolCtx) {
       styleIndex = styleIndex + 1;
 
       if (graphType === 'P') {
-        return getPieChartData(rows, colName, colPosition, queryToolCtx);
+        return getPieChartData(rows, colName, colPosition, theme.name);
       } else if (graphType === 'B' || graphType === 'SB') {
         return getBarChartData(rows, colName, colPosition, color);
       } else if (graphType === 'L' || graphType === 'SL') {
-        return getLineChartData(graphType, rows, colName, colPosition, color,
-          colorIndex, styleIndex, queryToolCtx);
+        return getLineChartData(graphType, rows, colName, colPosition, color, styleIndex, queryToolCtx);
       }
     }),
   };
 }
 
 export function GraphVisualiser({initColumns}) {
-  const classes = useStyles();
+
   const chartObjRef = React.useRef();
   const contentRef = React.useRef();
   const eventBus = useContext(QueryToolEventsContext);
   const queryToolCtx = useContext(QueryToolContext);
   const [graphType, setGraphType] = useState('L');
-  const [xaxis, setXAxis] = useState(null);
-  const [yaxis, setYAxis] = useState([]);
+  const [xAxis, setXAxis] = useState(null);
+  const [yAxis, setYAxis] = useState([]);
   const [[graphData, graphDataKey], setGraphData] = useState([{'datasets': []}, 0]);
   const [loaderText, setLoaderText] = useState('');
   const [columns, setColumns] = useState(initColumns);
   const [graphHeight, setGraphHeight] = useState();
   const [expandedState, setExpandedState] = useState(true);
+  const theme = useTheme();
 
 
   // Create X axis options for drop down.
@@ -339,7 +328,21 @@ export function GraphVisualiser({initColumns}) {
     if (graphType === 'P') {
       setYAxis('');
     }
-  }, [graphType]);
+  }, [graphType, theme]);
+
+  const graphBackgroundColor = useMemo(() => {
+    return theme.palette.background.default;
+  },[theme]);
+
+
+  const beforeDrawFunc = (chart) => {
+    const ctx = chart.canvas.getContext('2d');
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fillStyle = graphBackgroundColor;
+    ctx.fillRect(0, 0, chart.width, chart.height);
+    ctx.restore();
+  };
 
   // Generate button callback
   const onGenerate = async ()=>{
@@ -359,7 +362,10 @@ export function GraphVisualiser({initColumns}) {
     setLoaderText(gettext('Rendering data points...'));
     // Set the Graph Data
     setGraphData(
-      (prev)=> [getGraphDataSet(graphType, res.data.data.result, columns, xaxis, _.isArray(yaxis) ? yaxis : [yaxis] , queryToolCtx), prev[1] + 1]
+      (prev)=> [
+        getGraphDataSet(graphType, res.data.data.result, columns, xAxis, _.isArray(yAxis) ? yAxis : [yAxis] , queryToolCtx, theme.name),
+        prev[1] + 1
+      ]
     );
 
     setLoaderText('');
@@ -382,22 +388,17 @@ export function GraphVisualiser({initColumns}) {
   // when downloading the graph.
   const plugin = {
     beforeDraw: (chart) => {
-      const ctx = chart.canvas.getContext('2d');
-      ctx.save();
-      ctx.globalCompositeOperation = 'destination-over';
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-bg');
-      ctx.fillRect(0, 0, chart.width, chart.height);
-      ctx.restore();
+      beforeDrawFunc(chart);
     }
   };
 
   return (
-    <Box className={classes.mainContainer}>
+    <StyledBox>
       <Loader message={loaderText} />
-      <Box className={classes.topContainer}>
-        <Box className={classes.displayFlex}>
-          <span className={classes.spanLabel} >{gettext('Graph Type')}</span>
-          <InputSelect className={classes.selectCtrl} controlProps={{allowClear: false}}
+      <Box className='GraphVisualiser-topContainer'>
+        <Box className='GraphVisualiser-displayFlex'>
+          <span className='GraphVisualiser-spanLabel' >{gettext('Graph Type')}</span>
+          <InputSelect className='GraphVisualiser-selectCtrl' controlProps={{allowClear: false}}
             options={[
               {label: gettext('Line Chart'), value: 'L'},
               {label: gettext('Stacked Line Chart'), value: 'SL'},
@@ -411,7 +412,7 @@ export function GraphVisualiser({initColumns}) {
               }
             }} value={graphType} />
           <DefaultButton style={{marginLeft: 'auto'}} onClick={onGenerate} startIcon={<ShowChartRoundedIcon />}
-            disabled={ _.isEmpty(xaxis) || yaxis.length <= 0 }>
+            disabled={ _.isEmpty(xAxis) || yAxis.length <= 0 }>
             {gettext('Generate')}
           </DefaultButton>
           <PgIconButton title={expandedState ? gettext('Collapse') : gettext('Expand')}
@@ -419,15 +420,15 @@ export function GraphVisualiser({initColumns}) {
             onClick={()=>{setExpandedState(!expandedState);}}/>
         </Box>
         { expandedState && <>
-          <Box className={classes.displayFlex}>
-            <span className={classes.spanLabel}>{graphType != 'P' ? gettext('X Axis') : gettext('Label')}</span>
-            <InputSelect className={classes.axisSelectCtrl} options={xAxisOptions}
-              onChange={(v)=>setXAxis(v)} value={xaxis} optionsReloadBasis={optionsReload}/>
+          <Box className='GraphVisualiser-displayFlex'>
+            <span className='GraphVisualiser-spanLabel'>{graphType != 'P' ? gettext('X Axis') : gettext('Label')}</span>
+            <InputSelect className='GraphVisualiser-axisSelectCtrl' options={xAxisOptions}
+              onChange={(v)=>setXAxis(v)} value={xAxis} optionsReloadBasis={optionsReload}/>
           </Box>
-          <Box className={classes.displayFlex}>
-            <span className={classes.spanLabel}>{graphType != 'P' ? gettext('Y Axis') : gettext('Value')}</span>
-            <InputSelect className={classes.axisSelectCtrl} controlProps={{'multiple': graphType != 'P', allowSelectAll: graphType != 'P'}}
-              options={yAxisOptions} onChange={(v)=>setYAxis(v)} value={yaxis} optionsReloadBasis={optionsReload}/>
+          <Box className='GraphVisualiser-displayFlex'>
+            <span className='GraphVisualiser-spanLabel'>{graphType != 'P' ? gettext('Y Axis') : gettext('Value')}</span>
+            <InputSelect className='GraphVisualiser-axisSelectCtrl' controlProps={{'multiple': graphType != 'P', allowSelectAll: graphType != 'P'}}
+              options={yAxisOptions} onChange={(v)=>setYAxis(v)} value={yAxis} optionsReloadBasis={optionsReload}/>
           </Box>
         </>
         }
@@ -440,14 +441,14 @@ export function GraphVisualiser({initColumns}) {
             onClick={onDownloadGraph} disabled={ graphData.datasets.length <= 0 }/>
         </PgButtonGroup>
       </Box>
-      <Box ref={contentRef} className={classes.graphContainer}>
+      <Box ref={contentRef} className='GraphVisualiser-graphContainer'>
         <Box style={{height:`${graphHeight}px`}}>
           {useMemo(()=> <GenerateGraph graphType={graphType} graphData={graphData} onInit={(chartObj)=> {
             chartObjRef.current = chartObj;
-          }} plugins={plugin}/>, [graphDataKey])}
+          }} plugins={[plugin]}/>, [graphDataKey])}
         </Box>
       </Box>
-    </Box>
+    </StyledBox>
   );
 }
 GraphVisualiser.propTypes = {

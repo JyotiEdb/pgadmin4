@@ -22,7 +22,7 @@ const MAIN_MENUS = [
 ];
 
 let { name: browser } = getBrowser();
-if (browser == 'Nwjs') {
+if (browser == 'Electron') {
   let controlKey = isMac() ? 'cmd' : 'ctrl';
   let fullScreenKey = isMac() ? 'F' : 'F10';
 
@@ -47,9 +47,31 @@ if (browser == 'Nwjs') {
 }
 
 
-
-
 export default class MainMenuFactory {
+  static electronCallbacks = {};
+
+  static toElectron() {
+    // we support 2 levels of submenu
+    return pgAdmin.Browser.MainMenus.map((m)=>{
+      return {
+        ...m.serialize(),
+        submenu: m.menuItems.map((sm)=>{
+          const smName = `${m.name}_${sm.name}`;
+          MainMenuFactory.electronCallbacks[smName] = sm.callback;
+          return {
+            ...sm.serialize(),
+            submenu: sm.getMenuItems()?.map((smsm)=>{
+              MainMenuFactory.electronCallbacks[`${smName}_${smsm.name}`] = smsm.callback;
+              return {
+                ...smsm.serialize(),
+              };
+            })
+          };
+        })
+      };
+    });
+  }
+
   static createMainMenus() {
     pgAdmin.Browser.MainMenus = [];
     MAIN_MENUS.forEach((_menu) => {
@@ -70,6 +92,12 @@ export default class MainMenuFactory {
     });
 
     pgAdmin.Browser.enable_disable_menus();
+
+    window.electronUI?.onMenuClick((menuName)=>{
+      MainMenuFactory.electronCallbacks[menuName]?.();
+    });
+
+    window.electronUI?.setMenus(MainMenuFactory.toElectron());
   }
 
   static getSeparator(label, priority) {
@@ -78,7 +106,8 @@ export default class MainMenuFactory {
 
   static refreshMainMenuItems(menu, menuItems) {
     menu.setMenuItems(menuItems);
-    pgAdmin.Browser.Events.trigger('pgadmin:nw-refresh-menu-item', menu);
+    window.electronUI?.setMenus(MainMenuFactory.toElectron());
+    pgAdmin.Browser.Events.trigger('pgadmin:refresh-menu-item', pgAdmin.Browser.MainMenus);
   }
 
   static createMenuItem(options) {
@@ -87,25 +116,22 @@ export default class MainMenuFactory {
       if (options.module && 'callbacks' in options.module && options.module.callbacks[options.callback]) {
         options.module.callbacks[options.callback].apply(options.module, [options.data, pgAdmin.Browser.tree?.selected()]);
       } else if (options?.module?.[options.callback]) {
-        options.module[options.callback].apply(options.module, [options.data, pgAdmin.Browser.tree?.selected()]);
+        options.module[options.callback](options.data, pgAdmin.Browser.tree?.selected());
       } else if (options?.callback) {
         options.callback(options);
-      } else {
-        if (options.url != '#') {
-          let api = getApiInstance();
-          api(
-            url_for('tools.initialize')
-          ).then(()=>{
-            window.open(options.url);
-          }).catch(()=>{
-            pgAdmin.Browser.notifier.error(gettext('Error in opening window'));
-          });
-        }
+      } else if (options.url != '#') {
+        let api = getApiInstance();
+        api(
+          url_for('tools.initialize')
+        ).then(()=>{
+          window.open(options.url);
+        }).catch(()=>{
+          pgAdmin.Browser.notifier.error(gettext('Error in opening window'));
+        });
       }
     }}, (menu, item)=> {
-      pgAdmin.Browser.Events.trigger('pgadmin:nw-enable-disable-menu-items', menu, item);
-    }, (item) => {
-      pgAdmin.Browser.Events.trigger('pgadmin:nw-update-checked-menu-item', item);
+      pgAdmin.Browser.Events.trigger('pgadmin:enable-disable-menu-items', menu, item);
+      window.electronUI?.enableDisableMenuItems(menu?.serialize(), item?.serialize());
     });
   }
 
@@ -119,7 +145,7 @@ export default class MainMenuFactory {
     let selectedNode=pgAdmin.Browser.tree.selected();
     let flag=!_.isUndefined(selectedNodeFromNodes.showMenu);
     if(flag){
-      var showMenu = selectedNodeFromNodes.showMenu(d, selectedNode);
+      let showMenu = selectedNodeFromNodes.showMenu(d, selectedNode);
       return {flag:showMenu?false:flag,showMenu};
     } else{
       return {flag,showMenu:undefined};

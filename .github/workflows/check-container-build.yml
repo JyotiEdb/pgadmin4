@@ -17,7 +17,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Build the container
-        run: docker build .
+        uses: docker/build-push-action@v6
+        with:
+          push: false
+          context: .

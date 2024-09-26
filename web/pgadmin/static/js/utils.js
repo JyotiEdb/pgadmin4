@@ -14,6 +14,7 @@ import convert from 'convert-units';
 import getApiInstance from './api_instance';
 import usePreferences from '../../preferences/static/js/store';
 import pgAdmin from 'sources/pgadmin';
+import { isMac } from './keyboard_shortcuts';
 
 export function parseShortcutValue(obj) {
   let shortcut = '';
@@ -22,13 +23,55 @@ export function parseShortcutValue(obj) {
   }
   if (obj.alt) { shortcut += 'alt+'; }
   if (obj.shift) { shortcut += 'shift+'; }
-  if (obj.control) { shortcut += 'ctrl+'; }
+  if (isMac() && obj.ctrl_is_meta) { shortcut += 'meta+'; }
+  else if (obj.control) { shortcut += 'ctrl+'; }
   shortcut += obj?.key.char?.toLowerCase();
   return shortcut;
 }
 
+export function parseKeyEventValue(e) {
+  let shortcut = '';
+  if(!e) {
+    return null;
+  }
+  if (e.altKey) { shortcut += 'alt+'; }
+  if (e.shiftKey) { shortcut += 'shift+'; }
+  if (isMac() && e.metaKey) { shortcut += 'meta+'; }
+  else if (e.ctrlKey) { shortcut += 'ctrl+'; }
+  shortcut += e.key.toLowerCase();
+  return shortcut;
+}
+
+export function isShortcutValue(obj) {
+  if(!obj) return false;
+  return [obj.alt, obj.control, obj?.key, obj?.key?.char].every((k)=>!_.isUndefined(k));
+}
+
+// Convert shortcut obj to codemirror key format
+export function toCodeMirrorKey(obj) {
+  let shortcut = '';
+  if (!obj){
+    return shortcut;
+  }
+  if (obj.alt) { shortcut += 'Alt-'; }
+  if (obj.shift) { shortcut += 'Shift-'; }
+  if (obj.control) {
+    if(isMac() && obj.ctrl_is_meta) {
+      shortcut += 'Meta-';
+    } else {
+      shortcut += 'Ctrl-';
+    }
+  }
+  if(obj?.key.char?.length == 1) {
+    shortcut += obj?.key.char?.toLowerCase();
+  } else {
+    shortcut += obj?.key.char;
+  }
+  return shortcut;
+}
+
 export function getEpoch(inp_date) {
-  let date_obj = inp_date ? inp_date : new Date();
+  let date_obj = inp_date || new Date();
   return parseInt(date_obj.getTime()/1000);
 }
 
@@ -334,23 +377,26 @@ export function evalFunc(obj, func, ...param) {
 }
 
 export function getBrowser() {
-  let ua=navigator.userAgent,tem,M=ua.match(/(opera|chrome|safari|firefox|msie|trident(?=\/))\/?\s*(\d+)/i) || [];
+  if(navigator.userAgent.indexOf('Electron') >= 0) {
+    return {name: 'Electron', version: navigator.userAgent.match(/Electron\/([\d\.]+\d+)/)[1]};
+  }
+
+  let ua=navigator.userAgent,tem,M=(/(opera|chrome|safari|firefox|msie|trident(?=\/))\/?\s*(\d+)/i).exec(ua) || [];
   if(/trident/i.test(M[1])) {
     tem=/\brv[ :]+(\d+)/g.exec(ua) || [];
     return {name:'IE', version:(tem[1]||'')};
   }
-  if(ua.startsWith('Nwjs')) {
-    let nwjs = ua.split('-')[0]?.split(':');
-    return {name:nwjs[0], version: nwjs[1]};
+  if(ua.indexOf('Electron') >= 0) {
+    return {name: 'Electron', version: ua.match(/Electron\/([\d\.]+\d+)/)[1]};
   }
 
   if(M[1]==='Chrome') {
-    tem=ua.match(/\bOPR|Edge\/(\d+)/);
+    tem=(/\bOPR|Edge\/(\d+)/).exec(ua);
     if(tem!=null) {return {name:tem[0], version:tem[1]};}
   }
 
   M=M[2]? [M[1], M[2]]: [navigator.appName, navigator.appVersion, '-?'];
-  if((tem=ua.match(/version\/(\d+)/i))!=null) {M.splice(1,1,tem[1]);}
+  if((tem=(/version\/(\d+)/i).exec(ua))!=null) {M.splice(1,1,tem[1]);}
   return {
     name: M[0],
     version: M[1],
@@ -388,6 +434,10 @@ export function downloadBlob(blob, fileName) {
 
 export function toPrettySize(rawSize, from='B') {
   try {
+    //if the integer need to be converted to K for thousands, M for millions , B for billions only
+    if (from == '') {
+      return Intl.NumberFormat('en', {notation: 'compact'}).format(rawSize);
+    }
     let conVal = convert(rawSize).from(from).toBest();
     conVal.val = Math.round(conVal.val * 100) / 100;
     return `${conVal.val} ${conVal.unit}`;
@@ -545,7 +595,7 @@ export function pgHandleItemError(error, args) {
 
 export function fullHexColor(shortHex) {
   if(shortHex?.length == 4) {
-    return shortHex.replace(RegExp('#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])'), '#$1$1$2$2$3$3').toUpperCase();
+    return shortHex.replace(/#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])/, '#$1$1$2$2$3$3').toUpperCase();
   }
   return shortHex;
 }
@@ -597,3 +647,92 @@ export function requestAnimationAndFocus(ele) {
     cancelAnimationFrame(animateId);
   });
 }
+
+
+export function scrollbarWidth() {
+  // thanks too https://davidwalsh.name/detect-scrollbar-width
+  const scrollDiv = document.createElement('div');
+  scrollDiv.setAttribute('style', 'width: 100px; height: 100px; overflow: scroll; position:absolute; top:-9999px;');
+  document.body.appendChild(scrollDiv);
+  const scrollbarWidth = scrollDiv.offsetWidth - scrollDiv.clientWidth;
+  document.body.removeChild(scrollDiv);
+  return scrollbarWidth;
+}
+
+const CHART_THEME_COLORS = {
+  'light':['#1F77B4', '#FF7F0E', '#2CA02C', '#D62728', '#9467BD', '#8C564B',
+    '#E377C2', '#7F7F7F', '#BCBD22', '#17BECF', '#3366CC', '#DC3912', '#FF9900',
+    '#109618', '#990099', '#0099C6','#DD4477', '#66AA00', '#B82E2E', '#316395'],
+  'dark': ['#4878D0', '#EE854A', '#6ACC64', '#D65F5F', '#956CB4', '#8C613C',
+    '#DC7EC0', '#797979', '#D5BB67', '#82C6E2', '#7371FC', '#3A86FF', '#979DAC',
+    '#D4A276', '#2A9D8F', '#FFEE32', '#70E000', '#FF477E', '#7DC9F1', '#52B788'],
+  'high_contrast': ['#023EFF', '#FF7C00', '#1AC938', '#E8000B', '#8B2BE2',
+    '#9F4800', '#F14CC1', '#A3A3A3', '#FFC400', '#00D7FF', '#FF6C49', '#00B4D8',
+    '#45D48A', '#FFFB69', '#B388EB', '#D4A276', '#2EC4B6', '#7DC9F1', '#50B0F0',
+    '#52B788']
+};
+
+export function getChartColor(index, theme='light', colorPalette=CHART_THEME_COLORS) {
+  const palette = colorPalette[theme];
+  // loop back if out of index;
+  return palette[index % palette.length];
+}
+
+// Using this function instead of 'btoa' directly.
+// https://developer.mozilla.org/en-US/docs/Glossary/Base64#the_unicode_problem
+function stringToBase64(str) {
+  return btoa(
+    Array.from(
+      new TextEncoder().encode(str),
+      (byte) => String.fromCodePoint(byte),
+    ).join('')
+  );
+}
+
+/************************************
+ *
+ * Memoization of a function.
+ *
+ * NOTE: Please don't use the function, when:
+ * - One of the parameter in the arguments could have a 'circular' dependency.
+ *   NOTE: We use `JSON.stringify(...)` for all the arguments.`You could
+ *         introduce 'Object.prototype.toJSON(...)' function for the object
+ *         with circular dependency, which should return a JSON object without
+ *         it.
+ * - It returns a Promise object (asynchronous functions).
+ *
+ *   Consider to use 'https://github.com/sindresorhus/p-memoize' for an
+ *   asychronous functions.
+ *
+ **/
+export const memoizeFn = fn => new Proxy(fn, {
+  cache: new Map(),
+  apply (target, thisArg, argsList) {
+    let cacheKey = stringToBase64(JSON.stringify(argsList));
+    if(!this.cache.has(cacheKey)) {
+      this.cache.set(cacheKey, target.apply(thisArg, argsList));
+    }
+    return this.cache.get(cacheKey);
+  }
+});
+
+export const memoizeTimeout = (fn, time) => new Proxy(fn, {
+  cache: new Map(),
+  apply (target, thisArg, argsList) {
+    const cacheKey = stringToBase64(JSON.stringify(argsList));
+    const cached = this.cache.get(cacheKey);
+    const timeoutId = setTimeout(() => (this.cache.delete(cacheKey)), time);
+
+    if (cached) {
+      clearInterval(cached.timeoutId);
+      cached.timeoutId = timeoutId;
+
+      return cached.result;
+    }
+
+    const result = target.apply(thisArg, argsList);
+    this.cache.set(cacheKey, {result, timeoutId});
+
+    return result;
+  }
+});

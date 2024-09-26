@@ -39,6 +39,10 @@ export default function cmOverride(theme) {
             backgroundColor: editor.activeline,
           },
 
+          '& .cm-current-query': {
+            borderBottom: `1px solid ${editor.currentQueryBorderColor}`
+          },
+
           '& .tok-keyword': {
             color: editor.keyword,
             fontWeight: 600
@@ -48,11 +52,12 @@ export default function cmOverride(theme) {
             fontWeight: 600
           },
           '& .tok-string': {color: editor.string},
-          '& .tok-variable': {color: editor.variable },
+          '& .tok-variableName': {color: editor.variable },
           '& .tok-comment': {color: editor.comment},
           '& .tok-operator': { color: editor.operator },
           '& .tok-punctuation': {color: editor.punctuation},
           '& .tok-typeName': {color: editor.type},
+          '& .tok-name': {color: editor.name},
         },
 
         '& .cm-selectionLayer': {
@@ -76,6 +81,9 @@ export default function cmOverride(theme) {
         '& .cm-foldGutter': {
           padding: '0px',
           color: editor.fg,
+          '& .cm-gutterElement': {
+            width: '18px',
+          }
         },
 
         '& .cm-breakpoint-gutter': {
@@ -102,13 +110,15 @@ export default function cmOverride(theme) {
       }
     },
     '.cm-tooltip': {
+      ...theme.mixins.fontSourceCode,
       backgroundColor: theme.palette.background.default + '!important',
       color: theme.palette.text.primary + '!important',
       border: `1px solid ${theme.otherVars.borderColor} !important`,
+      fontSize: '0.9em',
 
       '& li[aria-selected="true"]': {
-        backgroundColor: theme.otherVars.treeBgSelected + '!important',
-        color: theme.otherVars.treeFgSelected + '!important',
+        backgroundColor: theme.otherVars.tree.treeBgSelected + '!important',
+        color: theme.otherVars.tree.treeFgSelected + '!important',
       },
 
       '& .pg-cm-autocomplete-icon': {
@@ -122,7 +132,7 @@ export default function cmOverride(theme) {
 
       '&.pg-autocomp-loader': {
         position: 'absolute',
-        paddingRight: '8px',
+        paddingRight: '1px 12px 1px 2px',
       }
     }
   };

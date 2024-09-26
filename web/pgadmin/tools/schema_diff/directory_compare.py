@@ -21,6 +21,9 @@ list_keys_array = ['name', 'colname', 'argid', 'token', 'option', 'conname',
                    'member_name', 'label', 'attname', 'fdwoption',
                    'fsrvoption', 'umoption']
 
+SPECIAL_NODES = ['table', 'view', 'mview']
+VIEW_NODES = ['view', 'mview']
+
 
 def _get_user_mapping_name(user_mapping_name):
     """
@@ -58,18 +61,29 @@ def _get_source_list(**kwargs):
         if 'oid' in source_dict[item]:
             source_object_id = source_dict[item]['oid']
 
-        if node == 'table':
+        if node in SPECIAL_NODES:
             temp_src_params = copy.deepcopy(source_params)
             temp_src_params['tid'] = source_object_id
             temp_src_params['json_resp'] = False
             temp_src_params['add_not_exists_clause'] = True
-            source_ddl = \
-                view_object.get_sql_from_table_diff(**temp_src_params)
-            temp_src_params.update({'target_schema': target_schema})
-            diff_ddl = view_object.get_sql_from_table_diff(**temp_src_params)
-            source_dependencies = \
-                view_object.get_table_submodules_dependencies(
-                    **temp_src_params)
+            if node in VIEW_NODES:
+                source_ddl = \
+                    view_object.get_sql_from_view_diff(**temp_src_params)
+                temp_src_params.update({'target_schema': target_schema})
+                diff_ddl = (
+                    view_object.get_sql_from_view_diff(**temp_src_params))
+                source_dependencies = \
+                    view_object.get_view_submodules_dependencies(
+                        **temp_src_params)
+            else:
+                source_ddl = \
+                    view_object.get_sql_from_table_diff(**temp_src_params)
+                temp_src_params.update({'target_schema': target_schema})
+                diff_ddl = (
+                    view_object.get_sql_from_table_diff(**temp_src_params))
+                source_dependencies = \
+                    view_object.get_table_submodules_dependencies(
+                        **temp_src_params)
         else:
             temp_src_params = copy.deepcopy(source_params)
             temp_src_params['oid'] = source_object_id
@@ -145,14 +159,23 @@ def _get_target_list(removed, target_dict, node, target_params, view_object,
         if 'oid' in target_dict[item]:
             target_object_id = target_dict[item]['oid']
 
-        if node == 'table':
+        if node in SPECIAL_NODES:
             temp_tgt_params = copy.deepcopy(target_params)
             temp_tgt_params['tid'] = target_object_id
             temp_tgt_params['json_resp'] = False
             temp_tgt_params['add_not_exists_clause'] = True
-            target_ddl = view_object.get_sql_from_table_diff(**temp_tgt_params)
-            _delete_keys(temp_tgt_params)
-            diff_ddl = view_object.get_drop_sql(**temp_tgt_params)
+            if node in VIEW_NODES:
+                target_ddl = (
+                    view_object.get_sql_from_view_diff(**temp_tgt_params))
+                temp_tgt_params.update(
+                    {'drop_sql': True})
+                diff_ddl = (
+                    view_object.get_sql_from_view_diff(**temp_tgt_params))
+            else:
+                target_ddl = (
+                    view_object.get_sql_from_table_diff(**temp_tgt_params))
+                _delete_keys(temp_tgt_params)
+                diff_ddl = view_object.get_drop_sql(**temp_tgt_params)
         else:
             temp_tgt_params = copy.deepcopy(target_params)
             temp_tgt_params['oid'] = target_object_id
@@ -288,7 +311,7 @@ def _get_identical_and_different_list(intersect_keys, source_dict, target_dict,
                 if 'scid' in target_params else 0,
             })
         else:
-            if node == 'table':
+            if node in SPECIAL_NODES:
                 temp_src_params = copy.deepcopy(source_params)
                 temp_tgt_params = copy.deepcopy(target_params)
                 # Add submodules into the ignore keys so that directory
@@ -308,16 +331,27 @@ def _get_identical_and_different_list(intersect_keys, source_dict, target_dict,
 
                 temp_src_params['tid'] = source_object_id
                 temp_tgt_params['tid'] = target_object_id
-                temp_src_params['json_resp'] = \
-                    temp_tgt_params['json_resp'] = False
 
-                source_ddl = \
-                    view_object.get_sql_from_table_diff(**temp_src_params)
-                diff_dependencies = \
-                    view_object.get_table_submodules_dependencies(
-                        **temp_src_params)
-                target_ddl = \
-                    view_object.get_sql_from_table_diff(**temp_tgt_params)
+                if node in VIEW_NODES:
+                    source_ddl = \
+                        view_object.get_sql_from_view_diff(**temp_src_params)
+                    diff_dependencies = \
+                        view_object.get_view_submodules_dependencies(
+                            **temp_src_params)
+                    target_ddl = \
+                        view_object.get_sql_from_view_diff(**temp_tgt_params)
+                else:
+                    temp_src_params['json_resp'] = \
+                        temp_tgt_params['json_resp'] = False
+
+                    source_ddl = \
+                        view_object.get_sql_from_table_diff(**temp_src_params)
+                    diff_dependencies = \
+                        view_object.get_table_submodules_dependencies(
+                            **temp_src_params)
+                    target_ddl = \
+                        view_object.get_sql_from_table_diff(**temp_tgt_params)
+
                 diff_ddl = view_object.get_sql_from_submodule_diff(
                     source_params=temp_src_params,
                     target_params=temp_tgt_params,

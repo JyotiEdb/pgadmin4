@@ -13,8 +13,10 @@ import pgadmin.browser.server_groups as sg
 from flask import render_template, request, make_response, jsonify, \
     current_app, url_for, session
 from flask_babel import gettext
-from flask_security import current_user, login_required
+from flask_security import current_user
+from pgadmin.user_login_check import pga_login_required
 from psycopg.conninfo import make_conninfo, conninfo_to_dict
+
 from pgadmin.browser.server_groups.servers.types import ServerType
 from pgadmin.browser.utils import PGChildNodeView
 from pgadmin.utils.ajax import make_json_response, bad_request, forbidden, \
@@ -30,16 +32,14 @@ from pgadmin.utils.driver import get_driver
 from pgadmin.utils.master_password import get_crypt_key
 from pgadmin.utils.exception import CryptKeyMissing
 from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
-from pgadmin.browser.server_groups.servers.utils import is_valid_ipaddress
+from pgadmin.browser.server_groups.servers.utils import \
+    is_valid_ipaddress, get_replication_type
 from pgadmin.utils.constants import UNAUTH_REQ, MIMETYPE_APP_JS, \
     SERVER_CONNECTION_CLOSED
 from sqlalchemy import or_
 from pgadmin.utils.preferences import Preferences
-from pgadmin.utils.constants import KEY_RING_SERVICE_NAME, \
-    KEY_RING_USERNAME_FORMAT, KEY_RING_TUNNEL_FORMAT, KEY_RING_DESKTOP_USER
 from .... import socketio as sio
 from pgadmin.utils import get_complete_file_path
-import keyring
 
 
 def has_any(data, keys):
@@ -162,6 +162,7 @@ class ServerModule(sg.ServerGroupPluginModule):
         server.tunnel_username = sharedserver.tunnel_username
         server.tunnel_password = sharedserver.tunnel_password
         server.save_password = sharedserver.save_password
+        server.tunnel_identity_file = sharedserver.tunnel_identity_file
         if hasattr(server, 'connection_params') and \
             hasattr(sharedserver, 'connection_params') and \
             'passfile' in server.connection_params and \
@@ -216,7 +217,7 @@ class ServerModule(sg.ServerGroupPluginModule):
 
         return servers
 
-    @login_required
+    @pga_login_required
     def get_nodes(self, gid):
         """Return a JSON document listing the server groups for the user"""
 
@@ -251,22 +252,6 @@ class ServerModule(sg.ServerGroupPluginModule):
             except Exception as e:
                 current_app.logger.exception(e)
                 errmsg = str(e)
-
-            is_password_saved = bool(server.save_password)
-            is_tunnel_password_saved = bool(server.tunnel_password)
-
-            if not config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                sname = KEY_RING_USERNAME_FORMAT.format(server.name, server.id)
-                spassword = keyring.get_password(
-                    KEY_RING_SERVICE_NAME, sname)
-
-                is_password_saved = bool(spassword)
-                tunnelname = KEY_RING_TUNNEL_FORMAT.format(server.name,
-                                                           server.id)
-                tunnel_password = keyring.get_password(KEY_RING_SERVICE_NAME,
-                                                       tunnelname)
-                is_tunnel_password_saved = bool(tunnel_password)
-
             yield self.generate_browser_node(
                 "%d" % (server.id),
                 gid,
@@ -283,8 +268,8 @@ class ServerModule(sg.ServerGroupPluginModule):
                 wal_pause=wal_paused,
                 host=server.host,
                 port=server.port,
-                is_password_saved=is_password_saved,
-                is_tunnel_password_saved=is_tunnel_password_saved,
+                is_password_saved=bool(server.save_password),
+                is_tunnel_password_saved=bool(server.tunnel_password),
                 was_connected=was_connected,
                 errmsg=errmsg,
                 user_id=server.user_id,
@@ -341,6 +326,12 @@ class ServerModule(sg.ServerGroupPluginModule):
         self.submodules.append(module)
 
         from .tablespaces import blueprint as module
+        self.submodules.append(module)
+
+        from .replica_nodes import blueprint as module
+        self.submodules.append(module)
+
+        from .pgd_replication_groups import blueprint as module
         self.submodules.append(module)
 
         super().register(app, options)
@@ -469,7 +460,7 @@ class ServerNode(PGChildNodeView):
         }],
         'check_pgpass': [{'get': 'check_pgpass'}],
         'clear_saved_password': [{'put': 'clear_saved_password'}],
-        'clear_sshtunnel_password': [{'put': 'clear_sshtunnel_password'}]
+        'clear_sshtunnel_password': [{'put': 'clear_sshtunnel_password'}],
     })
     SSL_MODES = ['prefer', 'require', 'verify-ca', 'verify-full']
 
@@ -559,7 +550,7 @@ class ServerNode(PGChildNodeView):
 
             data['connection_params'] = existing_conn_params
 
-    @login_required
+    @pga_login_required
     def nodes(self, gid):
         res = []
         """
@@ -595,22 +586,6 @@ class ServerNode(PGChildNodeView):
                     manager.release()
                     errmsg = "{0} : {1}".format(server.name, result)
 
-            is_password_saved = bool(server.save_password)
-            is_tunnel_password_saved = bool(server.tunnel_password)
-
-            if not config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                sname = KEY_RING_USERNAME_FORMAT.format(server.name, server.id)
-                spassword = keyring.get_password(
-                    KEY_RING_SERVICE_NAME, sname)
-
-                is_password_saved = bool(spassword)
-
-                tunnelname = KEY_RING_TUNNEL_FORMAT.format(server.name,
-                                                           server.id)
-                tunnel_password = keyring.get_password(KEY_RING_SERVICE_NAME,
-                                                       tunnelname)
-                is_tunnel_password_saved = bool(tunnel_password)
-
             res.append(
                 self.blueprint.generate_browser_node(
                     "%d" % (server.id),
@@ -627,8 +602,8 @@ class ServerNode(PGChildNodeView):
                     user=manager.user_info if connected else None,
                     in_recovery=in_recovery,
                     wal_pause=wal_paused,
-                    is_password_saved=is_password_saved,
-                    is_tunnel_password_saved=is_tunnel_password_saved,
+                    is_password_saved=bool(server.save_password),
+                    is_tunnel_password_saved=bool(server.tunnel_password),
                     errmsg=errmsg,
                     username=server.username,
                     shared=server.shared,
@@ -645,7 +620,7 @@ class ServerNode(PGChildNodeView):
 
         return make_json_response(result=res)
 
-    @login_required
+    @pga_login_required
     def node(self, gid, sid):
         """Return a JSON document listing the server groups for the user"""
         server = Server.query.filter_by(id=sid).first()
@@ -728,7 +703,7 @@ class ServerNode(PGChildNodeView):
                 success=0,
                 errormsg=e.message)
 
-    @login_required
+    @pga_login_required
     def delete(self, gid, sid):
         """Delete a server node in the settings database."""
         servers = Server.query.filter_by(user_id=current_user.id, id=sid)
@@ -751,20 +726,6 @@ class ServerNode(PGChildNodeView):
                     server_name = s.name
                     get_driver(PG_DEFAULT_DRIVER).delete_manager(s.id)
                     db.session.delete(s)
-                    if not config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                        try:
-                            sname = KEY_RING_USERNAME_FORMAT.format(
-                                s.name,
-                                s.id)
-                            # Get password form OS password manager
-                            is_present = keyring.get_password(
-                                KEY_RING_SERVICE_NAME, sname)
-                            # Delete saved password from OS password manager
-                            if is_present:
-                                keyring.delete_password(KEY_RING_SERVICE_NAME,
-                                                        sname)
-                        except keyring.errors.KeyringError as e:
-                            config.DISABLED_LOCAL_PASSWORD_STORAGE = True
                 db.session.commit()
                 self.delete_shared_server(server_name, gid, sid)
                 QueryHistory.clear_history(current_user.id, sid)
@@ -778,7 +739,7 @@ class ServerNode(PGChildNodeView):
         return make_json_response(success=1,
                                   info=gettext("Server deleted"))
 
-    @login_required
+    @pga_login_required
     def update(self, gid, sid):
         """Update the server settings"""
         server = Server.query.filter_by(id=sid).first()
@@ -878,26 +839,6 @@ class ServerNode(PGChildNodeView):
             )
 
         try:
-            if len(old_server_name) and old_server_name != server.name and \
-                    not config.DISABLED_LOCAL_PASSWORD_STORAGE and \
-                    server.save_password:
-                # If server name is changed then update keyring with
-                # new server name
-                password = keyring.get_password(
-                    KEY_RING_SERVICE_NAME,
-                    KEY_RING_USERNAME_FORMAT.format(old_server_name,
-                                                    server.id))
-
-                keyring.set_password(
-                    KEY_RING_SERVICE_NAME,
-                    KEY_RING_USERNAME_FORMAT.format(server.name, server.id),
-                    password)
-
-                server_name = KEY_RING_USERNAME_FORMAT.format(
-                    old_server_name, server.id)
-                # Delete saved password from OS password manager
-                keyring.delete_password(KEY_RING_SERVICE_NAME,
-                                        server_name)
             db.session.commit()
         except Exception as e:
             current_app.logger.exception(e)
@@ -983,7 +924,7 @@ class ServerNode(PGChildNodeView):
                         ).format(disp_lbl[arg])
                     )
 
-    @login_required
+    @pga_login_required
     def list(self, gid):
         """
         Return list of attributes of all servers.
@@ -1030,7 +971,7 @@ class ServerNode(PGChildNodeView):
             response=res
         )
 
-    @login_required
+    @pga_login_required
     def properties(self, gid, sid):
         """Return list of attributes of a server"""
 
@@ -1144,12 +1085,12 @@ class ServerNode(PGChildNodeView):
         con_info_ord = OrderedDict([('host', server.host),
                                     ('port', server.port),
                                     ('dbname', db_name),
-                                    ('user', server.username)])
+                                    ('user', manager.user)])
         con_info_ord.update(con_info)
         display_conn_string = make_conninfo(**con_info_ord)
         return display_conn_string
 
-    @login_required
+    @pga_login_required
     def create(self, gid):
         """Add a server node to the settings database"""
         required_args = ['name', 'db']
@@ -1165,11 +1106,10 @@ class ServerNode(PGChildNodeView):
             if data[item] == '':
                 data[item] = None
 
-        if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-            # Get enc key
-            crypt_key_present, crypt_key = get_crypt_key()
-            if not crypt_key_present:
-                raise CryptKeyMissing
+        # Get enc key
+        crypt_key_present, crypt_key = get_crypt_key()
+        if not crypt_key_present:
+            raise CryptKeyMissing
 
         # Some fields can be provided with service file so they are optional
         if 'service' in data and not data['service']:
@@ -1247,6 +1187,8 @@ class ServerNode(PGChildNodeView):
             connected = False
             user = None
             manager = None
+            replication_type = None
+            tunnel_password_saved = False
 
             if 'connect_now' in data and data['connect_now']:
                 manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(
@@ -1264,9 +1206,7 @@ class ServerNode(PGChildNodeView):
                     # login with password
                     have_password = True
                     password = data['password']
-                    if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                        password = encrypt(password, crypt_key)
-
+                    password = encrypt(password, crypt_key)
                 elif 'passfile' in data['connection_params'] and \
                         data['connection_params']['passfile'] != '':
                     passfile = data['connection_params']['passfile']
@@ -1274,10 +1214,7 @@ class ServerNode(PGChildNodeView):
                 if 'tunnel_password' in data and data["tunnel_password"] != '':
                     have_tunnel_password = True
                     tunnel_password = data['tunnel_password']
-
-                    if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                        tunnel_password = \
-                            encrypt(tunnel_password, crypt_key)
+                    tunnel_password = encrypt(tunnel_password, crypt_key)
 
                 status, errmsg = conn.connect(
                     password=password,
@@ -1298,32 +1235,18 @@ class ServerNode(PGChildNodeView):
                 else:
                     if 'save_password' in data and data['save_password'] and \
                             have_password and config.ALLOW_SAVE_PASSWORD:
-                        if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                            setattr(server, 'password', password)
-                            db.session.commit()
-                        else:
-                            # Store the password using OS password manager
-                            keyring.set_password(
-                                KEY_RING_SERVICE_NAME,
-                                KEY_RING_USERNAME_FORMAT.format(server.name,
-                                                                server.id),
-                                password)
+                        setattr(server, 'password', password)
+                        db.session.commit()
 
                     if 'save_tunnel_password' in data and \
                         data['save_tunnel_password'] and \
                         have_tunnel_password and \
                             config.ALLOW_SAVE_TUNNEL_PASSWORD:
-                        if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                            setattr(server, 'tunnel_password', tunnel_password)
-                            db.session.commit()
-                        else:
-                            # Store the password using OS password manager
-                            keyring.set_password(
-                                KEY_RING_SERVICE_NAME,
-                                KEY_RING_TUNNEL_FORMAT.format(server.name,
-                                                              server.id),
-                                tunnel_password)
+                        setattr(server, 'tunnel_password', tunnel_password)
+                        db.session.commit()
 
+                    replication_type = get_replication_type(conn,
+                                                            manager.version)
                     user = manager.user_info
                     connected = True
 
@@ -1337,6 +1260,7 @@ class ServerNode(PGChildNodeView):
                     username=server.username,
                     user=user,
                     connected=connected,
+                    replication_type=replication_type,
                     shared=server.shared,
                     server_type=manager.server_type
                     if manager and manager.server_type
@@ -1348,7 +1272,8 @@ class ServerNode(PGChildNodeView):
                     gss_authenticated=manager.gss_authenticated if
                     manager and manager.gss_authenticated else False,
                     is_password_saved=bool(server.save_password),
-                    is_tunnel_password_saved=bool(server.tunnel_password)
+                    is_tunnel_password_saved=tunnel_password_saved,
+                    user_id=server.user_id
                 )
             )
 
@@ -1364,15 +1289,15 @@ class ServerNode(PGChildNodeView):
                 errormsg=str(e)
             )
 
-    @login_required
+    @pga_login_required
     def sql(self, gid, sid):
         return make_json_response(data='')
 
-    @login_required
+    @pga_login_required
     def modified_sql(self, gid, sid):
         return make_json_response(data='')
 
-    @login_required
+    @pga_login_required
     def statistics(self, gid, sid):
         manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
         conn = manager.connection()
@@ -1396,11 +1321,11 @@ class ServerNode(PGChildNodeView):
             )
         )
 
-    @login_required
+    @pga_login_required
     def dependencies(self, gid, sid):
         return make_json_response(data='')
 
-    @login_required
+    @pga_login_required
     def dependents(self, gid, sid):
         return make_json_response(data='')
 
@@ -1427,6 +1352,7 @@ class ServerNode(PGChildNodeView):
         in_recovery = None
         wal_paused = None
         errmsg = None
+        replication_type = None
         if connected:
             status, result, in_recovery, wal_paused =\
                 recovery_state(conn, manager.version)
@@ -1436,10 +1362,13 @@ class ServerNode(PGChildNodeView):
                 manager.release()
                 errmsg = "{0} : {1}".format(server.name, result)
 
+            replication_type = get_replication_type(conn, manager.version)
+
         return make_json_response(
             data={
                 'icon': server_icon_and_background(connected, manager, server),
                 'connected': connected,
+                'replication_type': replication_type,
                 'in_recovery': in_recovery,
                 'wal_pause': wal_paused,
                 'server_type': manager.server_type if connected else "pg",
@@ -1448,7 +1377,7 @@ class ServerNode(PGChildNodeView):
             }
         )
 
-    def connect(self, gid, sid):
+    def connect(self, gid, sid, is_qt=False):
         """
         Connect the Server and return the connection object.
         Verification Process before Connection:
@@ -1459,7 +1388,7 @@ class ServerNode(PGChildNodeView):
             If Yes, connect the server and return connection.
             If No, Raise HTTP error and ask for the password.
 
-            In case of 'Save Password' request from user, excrypted Pasword
+            In case of 'Save Password' request from user, excrypted Password
             will be stored in the respected server database and
             establish the connection OR just connect the server and do not
             store the password.
@@ -1514,44 +1443,25 @@ class ServerNode(PGChildNodeView):
 
         # Connect the Server
         manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
-        if not manager.connection().connected():
+        # Update the manager with the server details if not connected and
+        # the API call is not made from SQL Editor or View/Edit Data tool
+        if not manager.connection().connected() and not is_qt:
             manager.update(server)
         conn = manager.connection()
 
         crypt_key = None
-        if server.save_password:
-            if config.DISABLED_LOCAL_PASSWORD_STORAGE or \
-                not keyring.get_password(
-                    KEY_RING_SERVICE_NAME,
-                    KEY_RING_DESKTOP_USER.format(current_user.username)):
-                crypt_key_present, crypt_key = get_crypt_key()
-                if not crypt_key_present:
-                    raise CryptKeyMissing
-
-        else:
-            if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                # Get enc key
-                crypt_key_present, crypt_key = get_crypt_key()
-                if not crypt_key_present:
-                    raise CryptKeyMissing
+        # Get enc key
+        crypt_key_present, crypt_key = get_crypt_key()
+        if not crypt_key_present:
+            raise CryptKeyMissing
 
         # If server using SSH Tunnel
         if server.use_ssh_tunnel:
-
             if 'tunnel_password' not in data:
-                if config.DISABLED_LOCAL_PASSWORD_STORAGE \
-                        and server.tunnel_password is None:
+                if server.tunnel_password is None:
                     prompt_tunnel_password = True
                 else:
-                    if not config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                        # Get password form OS password manager
-                        tunnel_password = keyring.get_password(
-                            KEY_RING_SERVICE_NAME,
-                            KEY_RING_TUNNEL_FORMAT.format(server.name,
-                                                          server.id))
-                        prompt_tunnel_password = not bool(tunnel_password)
-                    else:
-                        tunnel_password = server.tunnel_password
+                    tunnel_password = server.tunnel_password
             else:
                 tunnel_password = data['tunnel_password'] \
                     if 'tunnel_password' in data else ''
@@ -1561,11 +1471,9 @@ class ServerNode(PGChildNodeView):
                 # Encrypt the password before saving with user's login
                 # password key.
                 try:
-                    if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                        tunnel_password = encrypt(tunnel_password, crypt_key) \
-                            if tunnel_password is not None else \
-                            server.tunnel_password
-
+                    tunnel_password = encrypt(tunnel_password, crypt_key) \
+                        if tunnel_password is not None else \
+                        server.tunnel_password
                 except Exception as e:
                     current_app.logger.exception(e)
                     return internal_server_error(errormsg=str(e))
@@ -1587,38 +1495,20 @@ class ServerNode(PGChildNodeView):
                     get_complete_file_path(passfile_param):
                 passfile = passfile_param
             else:
-                if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                    password = conn_passwd or server.password
-                else:
-                    # Get password form OS password manager
-                    password = keyring.get_password(
-                        KEY_RING_SERVICE_NAME,
-                        KEY_RING_USERNAME_FORMAT.format(server.name,
-                                                        server.id))
+                password = conn_passwd or server.password
         else:
             password = data['password'] if 'password' in data else None
             save_password = data['save_password']\
                 if 'save_password' in data else False
 
-            if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                try:
-                    # Encrypt the password before saving with user's login
-                    # password key.
-                    password = encrypt(password, crypt_key) \
-                        if password is not None else server.password
-                except Exception as e:
-                    current_app.logger.exception(e)
-                    return internal_server_error(errormsg=str(e))
-            elif save_password and config.ALLOW_SAVE_PASSWORD:
-                # Store the password using OS password manager
-                keyring.set_password(
-                    KEY_RING_SERVICE_NAME,
-                    KEY_RING_USERNAME_FORMAT.format(
-                        server.name, server.id), password)
-                # Get password form OS password manager
-                password = keyring.get_password(
-                    KEY_RING_SERVICE_NAME,
-                    KEY_RING_USERNAME_FORMAT.format(server.name, server.id))
+            try:
+                # Encrypt the password before saving with user's login
+                # password key.
+                password = encrypt(password, crypt_key) \
+                    if password is not None else server.password
+            except Exception as e:
+                current_app.logger.exception(e)
+                return internal_server_error(errormsg=str(e))
 
         # Check do we need to prompt for the database server or ssh tunnel
         # password or both. Return the password template in case password is
@@ -1665,7 +1555,7 @@ class ServerNode(PGChildNodeView):
 
                     # Save the encrypted password using the user's login
                     # password key, if there is any password to save
-                    if password and config.DISABLED_LOCAL_PASSWORD_STORAGE:
+                    if password:
                         if server.shared and server.user_id != current_user.id:
                             setattr(shared_server, 'password', password)
                         else:
@@ -1681,18 +1571,8 @@ class ServerNode(PGChildNodeView):
 
             if save_tunnel_password and config.ALLOW_SAVE_TUNNEL_PASSWORD:
                 try:
-                    if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                        # Save the encrypted tunnel password.
-                        setattr(server, 'tunnel_password', tunnel_password)
-                    else:
-                        # Store the password using OS password manager
-                        keyring.set_password(
-                            KEY_RING_SERVICE_NAME,
-                            KEY_RING_TUNNEL_FORMAT.format(server.name,
-                                                          server.id),
-                            tunnel_password)
-                        setattr(server, 'tunnel_password', None)
-
+                    # Save the encrypted tunnel password.
+                    setattr(server, 'tunnel_password', tunnel_password)
                     db.session.commit()
                 except Exception as e:
                     # Release Connection
@@ -1709,6 +1589,8 @@ class ServerNode(PGChildNodeView):
             _, _, in_recovery, wal_paused =\
                 recovery_state(conn, manager.version)
 
+            replication_type = get_replication_type(conn, manager.version)
+
             return make_json_response(
                 success=1,
                 info=gettext("Server connected."),
@@ -1716,6 +1598,7 @@ class ServerNode(PGChildNodeView):
                     'icon': server_icon_and_background(True, manager, server),
                     'connected': True,
                     'server_type': manager.server_type,
+                    'replication_type': replication_type,
                     'type': manager.server_type,
                     'version': manager.version,
                     'db': manager.db,
@@ -1852,27 +1735,15 @@ class ServerNode(PGChildNodeView):
             elif request.data:
                 data = json.loads(request.data)
 
-            crypt_key = None
-
-            if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                # Get enc key
-                crypt_key_present, crypt_key = get_crypt_key()
-                if not crypt_key_present:
-                    raise CryptKeyMissing
+            # Get enc key
+            crypt_key_present, crypt_key = get_crypt_key()
+            if not crypt_key_present:
+                raise CryptKeyMissing
 
             # Fetch Server Details
             server = Server.query.filter_by(id=sid).first()
-
             if server is None:
                 return bad_request(self.not_found_error_msg())
-
-            spassword = None
-            if not config.DISABLED_LOCAL_PASSWORD_STORAGE and \
-                    bool(server.save_password):
-                sname = KEY_RING_USERNAME_FORMAT.format(server.name,
-                                                        server.id)
-                spassword = keyring.get_password(
-                    KEY_RING_SERVICE_NAME, sname)
 
             # Fetch User Details.
             user = User.query.filter_by(id=current_user.id).first()
@@ -1885,9 +1756,9 @@ class ServerNode(PGChildNodeView):
 
             # If there is no password found for the server
             # then check for pgpass file
-            if (not server.password or spassword) and \
-                not manager.password and hasattr(server, 'connection_params') \
-                and 'passfile' in server.connection_params and \
+            if not server.password and not manager.password and \
+                hasattr(server, 'connection_params') and \
+                'passfile' in server.connection_params and \
                 manager.get_connection_param_value('passfile') and \
                 server.connection_params['passfile'] == \
                     manager.get_connection_param_value('passfile'):
@@ -1927,17 +1798,9 @@ class ServerNode(PGChildNodeView):
 
             # Check against old password only if no pgpass file
             if not is_passfile:
-                if not config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                    if spassword:
-                        decrypted_password = spassword
-                    else:
-                        decrypted_password = manager.password
-                else:
-                    decrypted_password = decrypt(manager.password, crypt_key)
-
-                    if isinstance(decrypted_password, bytes):
-                        decrypted_password = decrypted_password.decode()
-
+                decrypted_password = decrypt(manager.password, crypt_key)
+                if isinstance(decrypted_password, bytes):
+                    decrypted_password = decrypted_password.decode()
                 password = data['password']
 
                 # Validate old password before setting new.
@@ -1969,17 +1832,7 @@ class ServerNode(PGChildNodeView):
 
             # Store password in sqlite only if no pgpass file
             if not is_passfile:
-                if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                    password = encrypt(data['newPassword'], crypt_key)
-                elif not config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                    if config.ALLOW_SAVE_PASSWORD and bool(
-                            server.save_password):
-                        keyring.set_password(
-                            KEY_RING_SERVICE_NAME,
-                            KEY_RING_USERNAME_FORMAT.format(server.name,
-                                                            server.id),
-                            data['newPassword'])
-                    password = data['newPassword']
+                password = encrypt(data['newPassword'], crypt_key)
                 # Check if old password was stored in pgadmin4 sqlite database.
                 # If yes then update that password.
                 if server.password is not None and config.ALLOW_SAVE_PASSWORD:
@@ -2146,8 +1999,8 @@ class ServerNode(PGChildNodeView):
                     session['allow_save_password'] else False,
                 "allow_save_tunnel_password":
                     True if config.ALLOW_SAVE_TUNNEL_PASSWORD and
-                    'allow_save_tunnel_password' in session and
-                    session['allow_save_tunnel_password'] else False
+                    'allow_save_password' in session and
+                    session['allow_save_password'] else False
             }
             return make_json_response(
                 success=0,
@@ -2203,25 +2056,10 @@ class ServerNode(PGChildNodeView):
                 server = ServerModule. \
                     get_shared_server_properties(server, shared_server)
 
-            if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                if server.shared and server.user_id != current_user.id:
-                    setattr(shared_server, 'password', None)
-                else:
-                    setattr(server, 'password', None)
+            if server.shared and server.user_id != current_user.id:
+                setattr(shared_server, 'password', None)
             else:
-                try:
-                    server_name = KEY_RING_USERNAME_FORMAT.format(server.name,
-                                                                  server.id)
-                    # Get password form OS password manager
-                    is_present = keyring.get_password(KEY_RING_SERVICE_NAME,
-                                                      server_name)
-                    if is_present:
-                        # Delete saved password from OS password manager
-                        keyring.delete_password(KEY_RING_SERVICE_NAME,
-                                                server_name)
-                except keyring.errors.KeyringError as e:
-                    config.DISABLED_LOCAL_PASSWORD_STORAGE = True
-                setattr(server, 'save_password', None)
+                setattr(server, 'password', None)
 
             # If password was saved then clear the flag also
             # 0 is False in SQLite db
@@ -2260,19 +2098,8 @@ class ServerNode(PGChildNodeView):
                     success=0,
                     info=self.not_found_error_msg()
                 )
-            if config.DISABLED_LOCAL_PASSWORD_STORAGE:
-                setattr(server, 'tunnel_password', None)
-                db.session.commit()
-            else:
-                server_name = KEY_RING_TUNNEL_FORMAT.format(server.name,
-                                                            server.id)
-                # Get password form OS password manager
-                is_present = keyring.get_password(KEY_RING_SERVICE_NAME,
-                                                  server_name)
-                if is_present:
-                    # Delete saved password from OS password manager
-                    keyring.delete_password(KEY_RING_SERVICE_NAME, server_name)
-                setattr(server, 'tunnel_password', None)
+            setattr(server, 'tunnel_password', None)
+            db.session.commit()
         except Exception as e:
             current_app.logger.error(
                 "Unable to clear ssh tunnel password."

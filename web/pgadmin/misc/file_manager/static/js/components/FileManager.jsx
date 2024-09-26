@@ -6,23 +6,22 @@
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
-import { Box, makeStyles } from '@material-ui/core';
+import { Box } from '@mui/material';
+import { styled } from '@mui/material/styles';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DefaultButton, PgButtonGroup, PgIconButton, PrimaryButton } from '../../../../../static/js/components/Buttons';
-import { useModalStyles } from '../../../../../static/js/helpers/ModalProvider';
-import CloseIcon from '@material-ui/icons/CloseRounded';
-import FolderSharedIcon from '@material-ui/icons/FolderShared';
-import FolderIcon from '@material-ui/icons/Folder';
-import CheckRoundedIcon from '@material-ui/icons/CheckRounded';
-import HomeRoundedIcon from '@material-ui/icons/HomeRounded';
-import ArrowUpwardRoundedIcon from '@material-ui/icons/ArrowUpwardRounded';
-import KeyboardArrowDownIcon from '@material-ui/icons/KeyboardArrowDown';
-import MoreHorizRoundedIcon from '@material-ui/icons/MoreHorizRounded';
-import SyncRoundedIcon from '@material-ui/icons/SyncRounded';
-import CreateNewFolderRoundedIcon from '@material-ui/icons/CreateNewFolderRounded';
-import GetAppRoundedIcon from '@material-ui/icons/GetAppRounded';
+import CloseIcon from '@mui/icons-material/CloseRounded';
+import FolderSharedIcon from '@mui/icons-material/FolderShared';
+import FolderIcon from '@mui/icons-material/Folder';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
+import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
+import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import MoreHorizRoundedIcon from '@mui/icons-material/MoreHorizRounded';
+import SyncRoundedIcon from '@mui/icons-material/SyncRounded';
+import CreateNewFolderRoundedIcon from '@mui/icons-material/CreateNewFolderRounded';
+import GetAppRoundedIcon from '@mui/icons-material/GetAppRounded';
 import gettext from 'sources/gettext';
-import clsx from 'clsx';
 import { FormFooterMessage, InputSelectNonSearch, InputText, MESSAGE_TYPE } from '../../../../../static/js/components/FormComponents';
 import ListView from './ListView';
 import { PgMenu, PgMenuDivider, PgMenuItem, usePgMenuGroup } from '../../../../../static/js/components/Menu';
@@ -38,40 +37,59 @@ import ErrorBoundary from '../../../../../static/js/helpers/ErrorBoundary';
 import { MY_STORAGE } from './FileManagerConstants';
 import _ from 'lodash';
 
-const useStyles = makeStyles((theme)=>({
-  footerSaveAs: {
+const StyledBox = styled(Box)(({theme}) => ({
+  backgroundColor: theme.palette.background.default,
+  '& .FileManager-toolbar': {
+    padding: '4px',
+    display: 'flex',
+    ...theme.mixins.panelBorder?.bottom,
+    '& .FileManager-sharedStorage': {
+      width: '3rem !important',
+    },
+    '& .FileManager-inputFilename': {
+      lineHeight: 1,
+      width: '100%',
+    },
+    '& .FileManager-inputSearch': {
+      marginLeft: '4px',
+      lineHeight: 1,
+      width: '130px',
+    },
+    '& .FileManager-storageName': {
+      paddingLeft: '0.2rem'
+    },
+    '& .FileManager-sharedIcon': {
+      width: '1.3rem'
+    }
+  },
+  '& .FileManager-footer': {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    padding: '0.5rem',
+    ...theme.mixins.panelBorder?.top,
+    '& .FileManager-margin': {
+      marginLeft: '0.25rem',
+    },
+  },
+  '& .FileManager-footer1': {
+    justifyContent: 'space-between',
+    padding: '4px 8px',
+    display: 'flex',
+    alignItems: 'center',
+    '& .FileManager-formatSelect': {
+      '& .MuiSelect-select': {
+        paddingTop: '4px',
+        paddingBottom: '4px',
+      }
+    },
+  },
+  '& .FileManager-footerSaveAs': {
     justifyContent: 'initial',
     padding: '4px 8px',
     display: 'flex',
     alignItems: 'center',
   },
-  footer1: {
-    justifyContent: 'space-between',
-    padding: '4px 8px',
-    display: 'flex',
-    alignItems: 'center',
-  },
-  toolbar: {
-    padding: '4px',
-    display: 'flex',
-    ...theme.mixins.panelBorder?.bottom,
-  },
-  inputFilename: {
-    lineHeight: 1,
-    width: '100%',
-  },
-  inputSearch: {
-    marginLeft: '4px',
-    lineHeight: 1,
-    width: '130px',
-  },
-  formatSelect: {
-    '& .MuiSelect-select': {
-      paddingTop: '4px',
-      paddingBottom: '4px',
-    }
-  },
-  replaceOverlay: {
+  '& .FileManager-replaceOverlay': {
     position: 'absolute',
     top: 0,
     bottom: 0,
@@ -81,7 +99,7 @@ const useStyles = makeStyles((theme)=>({
     zIndex: 2,
     display: 'flex',
   },
-  replaceDialog: {
+  '& .FileManager-replaceDialog': {
     margin: 'auto',
     marginLeft: '1rem',
     marginRight: '1rem',
@@ -90,15 +108,6 @@ const useStyles = makeStyles((theme)=>({
     width: '100%',
     ...theme.mixins.panelBorder.all,
   },
-  sharedStorage: {
-    width: '3rem !important',
-  },
-  storageName: {
-    paddingLeft: '0.2rem'
-  },
-  sharedIcon: {
-    width: '1.3rem'
-  }
 }));
 
 export function getComparator(sortColumn) {
@@ -382,15 +391,13 @@ export class FileManagerUtils {
 }
 
 function ConfirmFile({text, onYes, onNo}) {
-  const classes = useStyles();
-  const modalClasses = useModalStyles();
   return (
-    <Box className={classes.replaceOverlay}>
-      <Box margin={'8px'} className={classes.replaceDialog}>
+    <Box className='FileManager-replaceOverlay'>
+      <Box margin={'8px'} className='FileManager-replaceDialog'>
         <Box padding={'1rem'}>{text}{}</Box>
-        <Box className={modalClasses.footer}>
+        <Box className='FileManager-footer'>
           <DefaultButton data-test="no" startIcon={<CloseIcon />} onClick={onNo} >{gettext('No')}</DefaultButton>
-          <PrimaryButton data-test="yes" className={modalClasses.margin} startIcon={<CheckRoundedIcon />}
+          <PrimaryButton data-test="yes" className='FileManager-margin' startIcon={<CheckRoundedIcon />}
             onClick={onYes} autoFocus>{gettext('Yes')}</PrimaryButton>
         </Box>
       </Box>
@@ -404,8 +411,8 @@ ConfirmFile.propTypes = {
 };
 
 export default function FileManager({params, closeModal, onOK, onCancel, sharedStorages=[], restrictedSharedStorage=[]}) {
-  const classes = useStyles();
-  const modalClasses = useModalStyles();
+
+
   const apiObj = useMemo(()=>getApiInstance(), []);
   const fmUtilsObj = useMemo(()=>new FileManagerUtils(apiObj, params), []);
 
@@ -616,10 +623,8 @@ export default function FileManager({params, closeModal, onOK, onCancel, sharedS
   const onItemEnter = useCallback(async (row)=>{
     if(row.file_type == 'dir' || row.file_type == 'drive') {
       await openDir(row.Path, selectedSS);
-    } else {
-      if(params.dialog_type == 'select_file') {
-        onOkClick();
-      }
+    } else if(params.dialog_type == 'select_file') {
+      onOkClick();
     }
   }, [filteredItems]);
   const onItemSelect = useCallback((idx)=>{
@@ -628,7 +633,7 @@ export default function FileManager({params, closeModal, onOK, onCancel, sharedS
   }, [filteredItems]);
   const onItemClick = useCallback((idx)=>{
     let row = filteredItems[selectedRowIdx.current];
-    if(params.dialog_type == 'create_file' && row?.file_type != 'dir' && row.file_type != 'drive') {
+    if(params.dialog_type == 'create_file' && row?.file_type != 'dir' && row?.file_type != 'drive') {
       setSaveAs(filteredItems[idx]?.Filename);
     }
   }, [filteredItems]);
@@ -636,7 +641,7 @@ export default function FileManager({params, closeModal, onOK, onCancel, sharedS
     let disabled = true;
     let row = filteredItems[selectedRowIdx.current];
     if(params.dialog_type == 'create_file') {
-      disabled = !saveAs.trim();
+      disabled = !saveAs?.trim();
     } else if(selectedRowIdx.current >= 0 && row) {
       let selectedfileType = row?.file_type;
       if(((selectedfileType == 'dir' || selectedfileType == 'drive') && fmUtilsObj.hasCapability('select_folder'))
@@ -695,15 +700,15 @@ export default function FileManager({params, closeModal, onOK, onCancel, sharedS
 
   return (
     <ErrorBoundary>
-      <Box display="flex" flexDirection="column" height="100%" className={modalClasses.container}>
+      <StyledBox display="flex" flexDirection="column" height="100%">
         <Box flexGrow="1" display="flex" flexDirection="column" position="relative" overflow="hidden">
           <Loader message={loaderText} />
           {Boolean(confirmText) && <ConfirmFile text={confirmText} onNo={()=>setConfirmFile([null, null])} onYes={onConfirmYes}/>}
-          <Box className={classes.toolbar}>
+          <Box className='FileManager-toolbar'>
             <PgButtonGroup size="small" style={{flexGrow: 1}}>
               { sharedStorages.length > 0 &&
                 <PgIconButton title={ selectedSS == MY_STORAGE ? gettext('My Storage') :gettext(selectedSS)} icon={ selectedSS == MY_STORAGE ? <><FolderIcon/><KeyboardArrowDownIcon style={{marginLeft: '-10px'}} /></> : <><FolderSharedIcon /><KeyboardArrowDownIcon style={{marginLeft: '-10px'}} /></>} splitButton
-                  name="menu-shared-storage" ref={sharedSRef} onClick={toggleMenu} className={classes.sharedStorage}/>
+                  name="menu-shared-storage" ref={sharedSRef} onClick={toggleMenu} className='FileManager-sharedStorage'/>
               }
               <PgIconButton title={gettext('Home')} onClick={async ()=>{
                 await openDir(fmUtilsObj.config?.options?.homedir, selectedSS);
@@ -711,7 +716,7 @@ export default function FileManager({params, closeModal, onOK, onCancel, sharedS
               <PgIconButton title={gettext('Go Back')} onClick={async ()=>{
                 await openDir(fmUtilsObj.dirname(fmUtilsObj.currPath), selectedSS);
               }} icon={<ArrowUpwardRoundedIcon />} disabled={!fmUtilsObj.dirname(fmUtilsObj.currPath) || showUploader} />
-              <InputText className={classes.inputFilename}
+              <InputText size="small" className='FileManager-inputFilename'
                 data-label="file-path"
                 controlProps={{maxLength: null}}
                 onKeyDown={async (e)=>{
@@ -725,7 +730,7 @@ export default function FileManager({params, closeModal, onOK, onCancel, sharedS
                 await openDir(path, selectedSS);
               }} icon={<SyncRoundedIcon />} disabled={showUploader} />
             </PgButtonGroup>
-            <InputText type="search" className={classes.inputSearch} data-label="search" placeholder={gettext('Search')} value={search} onChange={setSearch} />
+            <InputText type="search" className='FileManager-inputSearch' data-label="search" placeholder={gettext('Search')} value={search} onChange={setSearch} />
             <PgButtonGroup size="small" style={{marginLeft: '4px'}}>
               {params.dialog_type == 'storage_dialog' &&
               <PgIconButton title={gettext('Download')} icon={<GetAppRoundedIcon />}
@@ -778,7 +783,7 @@ export default function FileManager({params, closeModal, onOK, onCancel, sharedS
                   onClick={async (option)=> {
                     option.keepOpen = false;
                     await changeDir(option.value);
-                  }}><FolderIcon className={classes.sharedIcon}/><Box className={classes.storageName}>{gettext('My Storage')}</Box></PgMenuItem>
+                  }}><FolderIcon className='FileManager-sharedIcon'/><Box className='FileManager-storageName'>{gettext('My Storage')}</Box></PgMenuItem>
 
                 {
                   sharedStorages.map((ss)=> {
@@ -787,7 +792,7 @@ export default function FileManager({params, closeModal, onOK, onCancel, sharedS
                         onClick={async(option)=> {
                           option.keepOpen = false;
                           await changeDir(option.value);
-                        }}><FolderSharedIcon className={classes.sharedIcon}/><Box className={classes.storageName}>{gettext(ss)}</Box></PgMenuItem>);
+                        }}><FolderSharedIcon className='FileManager-sharedIcon'/><Box className='FileManager-storageName'>{gettext(ss)}</Box></PgMenuItem>);
                   })
                 }
 
@@ -811,16 +816,16 @@ export default function FileManager({params, closeModal, onOK, onCancel, sharedS
               onItemSelect={onItemSelect} />}
             <FormFooterMessage type={MESSAGE_TYPE.ERROR} message={_.escape(errorMsg)} closable onClose={()=>setErrorMsg('')}  />
             {params.dialog_type == 'create_file' &&
-            <Box className={clsx(modalClasses.footer, classes.footerSaveAs)}>
+            <Box className={'FileManager-footer ' + 'FileManager-footerSaveAs'}>
               <span style={{whiteSpace: 'nowrap', marginRight: '4px'}}>Save As</span>
               <InputText inputRef={saveAsRef} autoFocus style={{height: '28px'}} value={saveAs} onChange={setSaveAs} />
             </Box>}
             {params.dialog_type != 'select_folder' &&
-            <Box className={clsx(modalClasses.footer, classes.footer1)}>
+            <Box className={'FileManager-footer ' + 'FileManager-footer1'}>
               <Box>{itemsText}</Box>
               <Box>
                 <span style={{marginRight: '8px'}}>File Format</span>
-                <InputSelectNonSearch value={fileType} className={classes.formatSelect}
+                <InputSelectNonSearch value={fileType} className='FileManager-formatSelect'
                   onChange={(e)=>{
                     let val = e.target.value;
                     fmUtilsObj.setFileType(val);
@@ -834,7 +839,7 @@ export default function FileManager({params, closeModal, onOK, onCancel, sharedS
             </Box>}
           </Box>
         </Box>
-        <Box className={modalClasses.footer}>
+        <Box className='FileManager-footer'>
           <PgButtonGroup style={{flexGrow: 1}}>
           </PgButtonGroup>
           <DefaultButton data-test="close" startIcon={<CloseIcon />} onClick={()=>{
@@ -842,10 +847,10 @@ export default function FileManager({params, closeModal, onOK, onCancel, sharedS
             closeModal();
           }} >{gettext('Cancel')}</DefaultButton>
           {params.dialog_type != 'storage_dialog' &&
-            <PrimaryButton data-test="save" className={modalClasses.margin} startIcon={<CheckRoundedIcon />}
+            <PrimaryButton data-test="save" className='FileManager-margin' startIcon={<CheckRoundedIcon />}
               onClick={onOkClick} disabled={okBtnDisable || showUploader}>{okBtnText}</PrimaryButton>}
         </Box>
-      </Box>
+      </StyledBox>
     </ErrorBoundary>
   );
 }

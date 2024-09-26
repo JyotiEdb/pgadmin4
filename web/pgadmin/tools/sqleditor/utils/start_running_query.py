@@ -28,6 +28,7 @@ from pgadmin.utils.driver import get_driver
 from pgadmin.utils.exception import ConnectionLost, SSHTunnelConnectionLost,\
     CryptKeyMissing
 from pgadmin.utils.constants import ERROR_MSG_TRANS_ID_NOT_FOUND
+from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
 
 
 class StartRunningQuery:
@@ -54,7 +55,6 @@ class StartRunningQuery:
         can_edit = False
         can_filter = False
         notifies = None
-        trans_status = None
         status = -1
         result = None
         if transaction_object is not None and session_obj is not None:
@@ -82,6 +82,21 @@ class StartRunningQuery:
 
             # Connect to the Server if not connected.
             if connect and not conn.connected():
+                view = SchemaDiffRegistry.get_node_view('server')
+                response = view.connect(transaction_object.sgid,
+                                        transaction_object.sid, True)
+                if response.status_code == 428:
+                    return response
+                else:
+                    conn = manager.connection(
+                        did=transaction_object.did,
+                        conn_id=self.connection_id,
+                        auto_reconnect=False,
+                        use_binary_placeholder=True,
+                        array_to_string=True,
+                        **({"database": transaction_object.dbname} if hasattr(
+                            transaction_object, 'dbname') else {}))
+
                 status, msg = conn.connect()
                 if not status:
                     self.logger.error(msg)
@@ -103,8 +118,6 @@ class StartRunningQuery:
 
             # Get the notifies
             notifies = conn.get_notifies()
-            trans_status = conn.transaction_status()
-
         else:
             status = False
             result = gettext(
@@ -115,7 +128,6 @@ class StartRunningQuery:
                 'status': status, 'result': result,
                 'can_edit': can_edit, 'can_filter': can_filter,
                 'notifies': notifies,
-                'transaction_status': trans_status,
             }
         )
 
@@ -162,10 +174,10 @@ class StartRunningQuery:
                     self.logger.error(e)
                     return internal_server_error(errormsg=str(e))
 
-        _thread = pgAdminThread(target=asyn_exec_query,
-                                args=(conn, sql, trans_obj, is_rollback_req,
-                                      current_app._get_current_object())
-                                )
+        _thread = QueryThread(target=asyn_exec_query,
+                              args=(conn, sql, trans_obj, is_rollback_req,
+                                    current_app._get_current_object())
+                              )
         _thread.start()
         _native_id = _thread.native_id if hasattr(_thread, 'native_id'
                                                   ) else _thread.ident
@@ -216,7 +228,7 @@ class StartRunningQuery:
         return grid_data[str(transaction_id)]
 
 
-class pgAdminThread(Thread):
+class QueryThread(Thread):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.app = current_app._get_current_object()

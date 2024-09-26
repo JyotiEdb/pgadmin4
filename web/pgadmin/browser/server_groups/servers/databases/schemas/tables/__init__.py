@@ -24,7 +24,7 @@ from .utils import BaseTableView
 from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
 from pgadmin.browser.server_groups.servers.databases.schemas.tables.\
     constraints.foreign_key import utils as fkey_utils
-from .schema_diff_utils import SchemaDiffTableCompare
+from .schema_diff_table_utils import SchemaDiffTableCompare
 from pgadmin.browser.server_groups.servers.databases.schemas.tables.\
     columns import utils as column_utils
 from pgadmin.browser.server_groups.servers.databases.schemas.tables.\
@@ -1079,6 +1079,7 @@ class TableView(BaseTableView, DataTypeReader, SchemaDiffTableCompare):
             return super().update(
                 gid, sid, did, scid, tid, data=data, res=res)
         except Exception as e:
+            current_app.logger.exception(e)
             return internal_server_error(errormsg=str(e))
 
     @BaseTableView.check_precondition
@@ -1673,7 +1674,7 @@ class TableView(BaseTableView, DataTypeReader, SchemaDiffTableCompare):
         return sql
 
     @BaseTableView.check_precondition
-    def fetch_tables(self, sid, did, scid, tid=None):
+    def fetch_tables(self, sid, did, scid, tid=None, with_serial_cols=False):
         """
         This function will fetch the list of all the tables
         and will be used by schema diff.
@@ -1682,10 +1683,12 @@ class TableView(BaseTableView, DataTypeReader, SchemaDiffTableCompare):
         :param did: Database Id
         :param scid: Schema Id
         :param tid: Table Id
+        :param with_serial_cols:
         :return: Table dataset
         """
 
-        status, res = BaseTableView.fetch_tables(self, sid, did, scid, tid)
+        status, res = BaseTableView.fetch_tables(self, sid, did, scid, tid,
+                                                 with_serial_cols)
         if not status:
             current_app.logger.error(res)
             return False

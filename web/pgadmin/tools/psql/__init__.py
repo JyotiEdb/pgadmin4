@@ -19,7 +19,8 @@ from flask import Response, request
 from flask import render_template, copy_current_request_context, \
     current_app as app
 from flask_babel import gettext
-from flask_security import login_required, current_user
+from flask_security import current_user
+from pgadmin.user_login_check import pga_login_required
 from pgadmin.browser.utils import underscore_unescape, underscore_escape
 from pgadmin.utils import PgAdminModule
 from pgadmin.utils.constants import MIMETYPE_APP_JS
@@ -71,7 +72,7 @@ blueprint = PSQLModule('psql', __name__, static_url_path='/static')
 
 
 @blueprint.route("/psql.js")
-@login_required
+@pga_login_required
 def script():
     """render the required javascript"""
     return Response(
@@ -84,7 +85,7 @@ def script():
 @blueprint.route('/panel/<int:trans_id>',
                  methods=["POST"],
                  endpoint="panel")
-@login_required
+@pga_login_required
 def panel(trans_id):
     """
     Return panel template for PSQL tools.
@@ -101,18 +102,21 @@ def panel(trans_id):
 
     data = _get_database_role(params['sid'], params['did'])
 
+    params = {
+        'sid': params['sid'],
+        'db': underscore_escape(data['db_name']),
+        'server_type': params['server_type'],
+        'is_enable': config.ENABLE_PSQL,
+        'title': underscore_unescape(params['title']),
+        'theme': params['theme'],
+        'o_db_name': underscore_escape(data['db_name']),
+        'role': underscore_escape(data['role']),
+        'platform': _platform
+    }
+
     set_env_variables(is_win=_platform == 'win32')
-    return render_template('editor_template.html',
-                           sid=params['sid'],
-                           db=underscore_escape(data['db_name']),
-                           server_type=params['server_type'],
-                           is_enable=config.ENABLE_PSQL,
-                           title=underscore_unescape(params['title']),
-                           theme=params['theme'],
-                           o_db_name=underscore_escape(data['db_name']),
-                           role=underscore_escape(data['role']),
-                           platform=_platform
-                           )
+    return render_template("psql/index.html",
+                           params=json.dumps(params))
 
 
 def set_env_variables(is_win=False):

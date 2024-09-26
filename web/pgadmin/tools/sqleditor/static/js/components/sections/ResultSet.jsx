@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 import _ from 'lodash';
+import { styled } from '@mui/material/styles';
 import React, { useContext, useEffect, useRef, useState }  from 'react';
 import QueryToolDataGrid, { GRID_ROW_SELECT_KEY } from '../QueryToolDataGrid';
 import {CONNECTION_STATUS, PANELS, QUERY_TOOL_EVENTS} from '../QueryToolConstants';
@@ -15,7 +16,7 @@ import getApiInstance, { parseApiError } from '../../../../../../static/js/api_i
 import { QueryToolContext, QueryToolEventsContext } from '../QueryToolComponent';
 import gettext from 'sources/gettext';
 import Loader from 'sources/components/Loader';
-import { Box } from '@material-ui/core';
+import { Box } from '@mui/material';
 import { ResultSetToolbar } from './ResultSetToolbar';
 import { LayoutDockerContext } from '../../../../../../static/js/helpers/Layout';
 import { GeometryViewer } from './GeometryViewer';
@@ -25,14 +26,21 @@ import { getBrowser } from '../../../../../../static/js/utils';
 import CopyData from '../QueryToolDataGrid/CopyData';
 import moment from 'moment';
 import ConfirmSaveContent from '../../../../../../static/js/Dialogs/ConfirmSaveContent';
-import { makeStyles } from '@material-ui/styles';
 import EmptyPanelMessage from '../../../../../../static/js/components/EmptyPanelMessage';
 import { GraphVisualiser } from './GraphVisualiser';
 import { usePgAdmin } from '../../../../../../static/js/BrowserComponent';
 import pgAdmin from 'sources/pgadmin';
+import ConnectServerContent from '../../../../../../static/js/Dialogs/ConnectServerContent';
+
+const StyledBox = styled(Box)(({theme}) => ({
+  display: 'flex',
+  height: '100%',
+  flexDirection: 'column',
+  backgroundColor: theme.otherVars.qtDatagridBg,
+}));
 
 export class ResultSetUtils {
-  constructor(api, transId, isQueryTool=true) {
+  constructor(api, queryToolCtx, transId, isQueryTool=true) {
     this.api = api;
     this.transId = transId;
     this.startTime = new Date();
@@ -40,6 +48,8 @@ export class ResultSetUtils {
     this.isQueryTool = isQueryTool;
     this.clientPKLastIndex = 0;
     this.historyQuerySource = null;
+    this.hasQueryCommitted = false;
+    this.queryToolCtx = queryToolCtx;
   }
 
   static generateURLReconnectionFlag(baseUrl, transId, shouldReconnect) {
@@ -179,9 +189,50 @@ export class ResultSetUtils {
       );
     }
   }
+  connectServerModal (modalData, connectCallback, cancelCallback) {
+    this.queryToolCtx.modal.showModal(gettext('Connect to server'), (closeModal)=>{
+      return (
+        <ConnectServerContent
+          closeModal={()=>{
+            cancelCallback?.();
+            closeModal();
+          }}
+          data={modalData}
+          onOK={(formData)=>{
+            connectCallback(Object.fromEntries(formData));
+            closeModal();
+          }}
+        />
+      );
+    }, {
+      onClose: cancelCallback,
+    });
+  };
+  async connectServer (sid, user, formData, connectCallback) {
+    try {
+      let {data: respData} = await this.api({
+        method: 'POST',
+        url: url_for('sqleditor.connect_server', {
+          'sid': sid,
+          ...(user ? {
+            'usr': user,
+          }:{}),
+        }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        data: formData
+      });
+      connectCallback?.(respData.data);
+    } catch (error) {
+      this.connectServerModal(error.response?.data?.result, async (data)=>{
+        this.connectServer(sid, user, data, connectCallback);
+      }, ()=>{
+        /*This is intentional (SonarQube)*/
+      });
+    }
+  };
 
-  async startExecution(query, explainObject, onIncorrectSQL, flags={
-    isQueryTool: true, external: false, reconnect: false
+  async startExecution(query, explainObject, macroSQL, onIncorrectSQL, flags={
+    isQueryTool: true, external: false, reconnect: false, executeCursor: false
   }) {
     let startTime = new Date();
     this.eventBus.fireEvent(QUERY_TOOL_EVENTS.SET_MESSAGE, '');
@@ -202,7 +253,6 @@ export class ResultSetUtils {
     }
     try {
       let {data: httpMessageData} = await this.postExecutionApi(query, explainObject, flags.isQueryTool, flags.reconnect);
-      this.eventBus.fireEvent(QUERY_TOOL_EVENTS.SET_CONNECTION_STATUS, httpMessageData.data.transaction_status);
 
       if (ResultSetUtils.isSqlCorrect(httpMessageData)) {
         this.setStartData(httpMessageData.data);
@@ -233,20 +283,30 @@ export class ResultSetUtils {
           is_pgadmin_query: false,
         });
         if(!flags.external) {
-          this.eventBus.fireEvent(QUERY_TOOL_EVENTS.HIGHLIGHT_ERROR, httpMessageData.data.result);
+          this.eventBus.fireEvent(QUERY_TOOL_EVENTS.HIGHLIGHT_ERROR, httpMessageData.data.result, flags.executeCursor);
         }
       }
     } catch(e) {
-      this.eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_END);
-      this.eventBus.fireEvent(QUERY_TOOL_EVENTS.HANDLE_API_ERROR,
-        e,
-        {
-          connectionLostCallback: ()=>{
-            this.eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, query, explainObject, flags.external, true);
-          },
-          checkTransaction: true,
-        }
-      );
+      if(e?.response?.status == 428){
+        this.connectServerModal(e.response?.data?.result, async (passwordData)=>{
+          await this.connectServer(this.queryToolCtx.params.sid, this.queryToolCtx.params.user, passwordData, async ()=>{
+            await this.eventBus.fireEvent(QUERY_TOOL_EVENTS.REINIT_QT_CONNECTION, '', explainObject, macroSQL, flags.executeCursor, true);
+          });
+        }, ()=>{
+          /*This is intentional (SonarQube)*/
+        });
+      } else {
+        this.eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_END);
+        this.eventBus.fireEvent(QUERY_TOOL_EVENTS.HANDLE_API_ERROR,
+          e,
+          {
+            connectionLostCallback: ()=>{
+              this.eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, query, explainObject, '', flags.external, true, flags.executeCursor);
+            },
+            checkTransaction: true,
+          }
+        );
+      }
     }
     return false;
   }
@@ -281,9 +341,9 @@ export class ResultSetUtils {
   handlePollError(error, explainObject, flags) {
     this.eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_END);
     this.eventBus.fireEvent(QUERY_TOOL_EVENTS.FOCUS_PANEL, PANELS.MESSAGES);
-    this.eventBus.fireEvent(QUERY_TOOL_EVENTS.SET_CONNECTION_STATUS, CONNECTION_STATUS.TRANSACTION_STATUS_INERROR);
+    this.eventBus.fireEvent(QUERY_TOOL_EVENTS.SET_CONNECTION_STATUS, error.response.data.data?.transaction_status);
     if (!flags.external) {
-      this.eventBus.fireEvent(QUERY_TOOL_EVENTS.HIGHLIGHT_ERROR, parseApiError(error, true));
+      this.eventBus.fireEvent(QUERY_TOOL_EVENTS.HIGHLIGHT_ERROR, parseApiError(error, true), flags.executeCursor);
     }
     this.eventBus.fireEvent(QUERY_TOOL_EVENTS.PUSH_HISTORY, {
       status: false,
@@ -297,7 +357,7 @@ export class ResultSetUtils {
     });
     this.eventBus.fireEvent(QUERY_TOOL_EVENTS.HANDLE_API_ERROR, error, {
       connectionLostCallback: ()=>{
-        this.eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, this.query, explainObject, flags.external, true);
+        this.eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, this.query, explainObject, '', flags.external, true, flags.executeCursor);
       },
       checkTransaction: true,
     });
@@ -379,7 +439,17 @@ export class ResultSetUtils {
         'trans_id': this.transId
       }),
       JSON.stringify(reqData)
-    );
+    ).then(response => {
+      if (response.data?.data?.status) {
+        // Set the commit flag to true if the save was successful
+        this.hasQueryCommitted = true;
+      }
+      return response;
+    }).catch((error) => {
+      // Set the commit flag to false if there was an error
+      this.hasQueryCommitted = false;
+      throw error;
+    });
   }
 
   async saveResultsToFile(fileName) {
@@ -388,7 +458,7 @@ export class ResultSetUtils {
         url_for('sqleditor.query_tool_download', {
           'trans_id': this.transId,
         }),
-        {filename: fileName}
+        {filename: fileName, query_commited: this.hasQueryCommitted}
       );
 
       if(!_.isUndefined(respData.data)) {
@@ -396,6 +466,7 @@ export class ResultSetUtils {
           this.eventBus.fireEvent(QUERY_TOOL_EVENTS.SET_MESSAGE, respData.data.result);
         }
       } else {
+        this.hasQueryCommitted = false;
         let respBlob = new Blob([respData], {type : 'text/csv'}),
           urlCreator = window.URL || window.webkitURL,
           download_url = urlCreator.createObjectURL(respBlob),
@@ -632,7 +703,7 @@ export class ResultSetUtils {
       && data.types[0] && data.types[0].typname === 'json') {
       /* json is sent as text, parse it */
       let planJson = JSON.parse(data.result[0][0]);
-      if (planJson?.[0] && planJson?.[0].hasOwnProperty('Plan') &&
+      if (planJson?.[0]?.hasOwnProperty('Plan') &&
             _.isObject(planJson[0]['Plan'])
       ) {
         return planJson;
@@ -736,28 +807,20 @@ function dataChangeReducer(state, action) {
   return dataChange;
 }
 
-const useStyles = makeStyles((theme)=>({
-  root: {
-    display: 'flex',
-    height: '100%',
-    flexDirection: 'column',
-    backgroundColor: theme.otherVars.qtDatagridBg,
-  }
-}));
-
 export function ResultSet() {
-  const classes = useStyles();
+
   const containerRef = React.useRef(null);
   const eventBus = useContext(QueryToolEventsContext);
   const queryToolCtx = useContext(QueryToolContext);
   const layoutDocker = useContext(LayoutDockerContext);
   const [loaderText, setLoaderText] = useState('');
+  const [dataOutputQuery,setDataOutputQuery] = useState('');
   const [queryData, setQueryData] = useState(null);
   const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const api = getApiInstance();
-  const rsu = React.useRef(new ResultSetUtils(api, queryToolCtx.params.trans_id, queryToolCtx.params.is_query_tool));
+  const rsu = React.useRef(new ResultSetUtils(api, queryToolCtx, queryToolCtx.params.trans_id, queryToolCtx.params.is_query_tool));
   const [dataChangeStore, dispatchDataChange] = React.useReducer(dataChangeReducer, {});
   const [selectedRows, setSelectedRows] = useState(new Set());
   const [selectedColumns, setSelectedColumns] = useState(new Set());
@@ -792,7 +855,7 @@ export function ResultSet() {
     eventBus.fireEvent(QUERY_TOOL_EVENTS.SELECTED_ROWS_COLS_CELL_CHANGED, selectedRows.size, selectedColumns.size, selectedRange.current, selectedCell.current?.length);
   };
 
-  const executionStartCallback = async (query, explainObject, external=false, reconnect=false)=>{
+  const executionStartCallback = async (query, explainObject, macroSQL, external=false, reconnect=false, executeCursor=false)=>{
     const yesCallback = async ()=>{
       /* Reset */
       eventBus.fireEvent(QUERY_TOOL_EVENTS.HIGHLIGHT_ERROR, null);
@@ -801,13 +864,14 @@ export function ResultSet() {
       setSelectedColumns(new Set());
       rsu.current.resetClientPKIndex();
       setLoaderText(gettext('Waiting for the query to complete...'));
+      setDataOutputQuery(query);
       return await rsu.current.startExecution(
-        query, explainObject,
+        query, explainObject, macroSQL,
         ()=>{
           setColumns([]);
           setRows([]);
         },
-        {isQueryTool: queryToolCtx.params.is_query_tool, external: external, reconnect: reconnect}
+        {isQueryTool: queryToolCtx.params.is_query_tool, external: external, reconnect: reconnect, executeCursor: executeCursor}
       );
     };
 
@@ -836,13 +900,20 @@ export function ResultSet() {
           setRows([]);
         },
         explainObject,
-        {isQueryTool: queryToolCtx.params.is_query_tool, external: external, reconnect: reconnect}
+        {isQueryTool: queryToolCtx.params.is_query_tool, external: external, reconnect: reconnect, executeCursor: executeCursor}
       );
     };
 
     const executeAndPoll = async ()=>{
-      await yesCallback();
-      pollCallback();
+      await yesCallback().then((res)=>{
+        if(res){
+          pollCallback();
+        } else {
+          eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_END);
+        }
+      }).catch((err)=>{
+        console.error(err);
+      });
     };
 
     if(isDataChanged()) {
@@ -887,11 +958,11 @@ export function ResultSet() {
     eventBus.registerListener(QUERY_TOOL_EVENTS.TRIGGER_STOP_EXECUTION, async ()=>{
       try {
         await rsu.current.stopExecution();
+        eventBus.fireEvent(QUERY_TOOL_EVENTS.SET_CONNECTION_STATUS, CONNECTION_STATUS.TRANSACTION_STATUS_IDLE);
+        eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_END);
       } catch(e) {
-        eventBus.fireEvent(QUERY_TOOL_EVENTS.HANDLE_API_ERROR, e);
+        pgAdmin.Browser.notifier.error(parseApiError(e));
       }
-      eventBus.fireEvent(QUERY_TOOL_EVENTS.SET_CONNECTION_STATUS, CONNECTION_STATUS.TRANSACTION_STATUS_IDLE);
-      eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_END);
     });
 
     eventBus.registerListener(QUERY_TOOL_EVENTS.EXECUTION_END, ()=>{
@@ -978,7 +1049,7 @@ export function ResultSet() {
           e,
           {
             connectionLostCallback: ()=>{
-              eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, rsu.current.query, null, false, true);
+              eventBus.fireEvent(QUERY_TOOL_EVENTS.EXECUTION_START, rsu.current.query, null, '', false, true);
             },
             checkTransaction: true,
           }
@@ -1064,7 +1135,7 @@ export function ResultSet() {
             'info': gettext('This query was generated by pgAdmin as part of a "Save Data" operation'),
           });
         });
-      } catch (_e) {/* History errors should not bother others */}
+      } catch {/* History errors should not bother others */}
 
       if(!respData.data.status) {
         eventBus.fireEvent(QUERY_TOOL_EVENTS.SAVE_DATA_DONE, false);
@@ -1187,17 +1258,15 @@ export function ResultSet() {
       let clientPK = row[rsu.current.clientPK];
       if(clientPK in dataChangeStore.deleted) {
         remove.push(clientPK);
-      } else {
+      } else if(clientPK in dataChangeStore.added) {
         /* If deleted from newly added */
-        if(clientPK in dataChangeStore.added) {
-          removeNewlyAdded.push(clientPK);
-        } else {
-          let primaryKeys = {};
-          Object.keys(queryData.primary_keys).forEach((k)=>{
-            primaryKeys[k] = row[k];
-          });
-          add[clientPK] = primaryKeys;
-        }
+        removeNewlyAdded.push(clientPK);
+      } else {
+        let primaryKeys = {};
+        Object.keys(queryData.primary_keys).forEach((k)=>{
+          primaryKeys[k] = row[k];
+        });
+        add[clientPK] = primaryKeys;
       }
     }
     if(removeNewlyAdded.length > 0) {
@@ -1247,6 +1316,16 @@ export function ResultSet() {
         let selectedRowsSorted = Array.from(selectedRows);
         selectedRowsSorted.sort();
         insPosn = _.findIndex(rows, (r)=>rowKeyGetter(r)==selectedRowsSorted[selectedRowsSorted.length-1])+1;
+      }
+      let byteaCellSelection = columns.filter(o=>o.type=='bytea'); 
+      if (byteaCellSelection.length>0) {
+        _rows = _rows.map(x=>{
+          byteaCellSelection.forEach(r=>{
+            x[r.pos]=null;
+            return x;
+          });
+          return x;
+        });
       }
       let newRows = rsu.current.processRows(_rows, columns, fromClipboard, pasteSerials);
       setRows((prev)=>[
@@ -1382,14 +1461,14 @@ export function ResultSet() {
 
   const rowKeyGetter = React.useCallback((row)=>row[rsu.current.clientPK]);
   return (
-    <Box className={classes.root} ref={containerRef} tabIndex="0">
+    <StyledBox ref={containerRef} tabIndex="0">
       <Loader message={loaderText} />
       <Loader data-label="loader-more-rows" message={isLoadingMore ? gettext('Loading more rows...') : null} style={{top: 'unset', right: 'unset', padding: '0.5rem 1rem'}}/>
       {!queryData &&
         <EmptyPanelMessage text={gettext('No data output. Execute a query to get output.')}/>
       }
       {queryData && <>
-        <ResultSetToolbar containerRef={containerRef} canEdit={queryData.can_edit} totalRowCount={queryData?.rows_affected}/>
+        <ResultSetToolbar containerRef={containerRef} query={dataOutputQuery} canEdit={queryData.can_edit} totalRowCount={queryData?.rows_affected}/>
         <Box flexGrow="1" minHeight="0">
           <QueryToolDataGrid
             columns={columns}
@@ -1414,6 +1493,6 @@ export function ResultSet() {
           />
         </Box>
       </>}
-    </Box>
+    </StyledBox>
   );
 }

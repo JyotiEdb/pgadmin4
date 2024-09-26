@@ -59,6 +59,8 @@ ERROR_FETCHING_ROLE_INFORMATION = gettext(
 
 ERROR_FETCHING_DATA = gettext('Unable to fetch data.')
 
+ERROR_SERVER_ID_NOT_SPECIFIED = gettext('Server ID not specified.')
+
 # Authentication Sources
 INTERNAL = 'internal'
 LDAP = 'ldap'
@@ -88,6 +90,9 @@ BINARY_PATHS = {
          "isDefault": False},
         {"version": "160000", "next_major_version": "170000",
          "serverType": gettext("EDB Advanced Server 16"), "binaryPath": None,
+         "isDefault": False},
+        {"version": "170000", "next_major_version": "180000",
+         "serverType": gettext("EDB Advanced Server 17"), "binaryPath": None,
          "isDefault": False}
     ],
     "pg_bin_paths": [
@@ -105,6 +110,9 @@ BINARY_PATHS = {
          "isDefault": False},
         {"version": "160000", "next_major_version": "170000",
          "serverType": gettext("PostgreSQL 16"), "binaryPath": None,
+         "isDefault": False},
+        {"version": "170000", "next_major_version": "180000",
+         "serverType": gettext("PostgreSQL 17"), "binaryPath": None,
          "isDefault": False}
     ]
 }
@@ -126,6 +134,7 @@ ACCESS_DENIED_MESSAGE = gettext(
 
 
 KEY_RING_SERVICE_NAME = 'pgAdmin4'
+KEY_RING_USER_NAME = 'pgadmin4-master-password'
 KEY_RING_USERNAME_FORMAT = KEY_RING_SERVICE_NAME + '-{0}-{1}'
 KEY_RING_TUNNEL_FORMAT = KEY_RING_SERVICE_NAME + '-tunnel-{0}-{1}'
 KEY_RING_DESKTOP_USER = KEY_RING_SERVICE_NAME + '-desktop-user-{0}'
@@ -137,3 +146,11 @@ class MessageType:
     INFO = 'Info',
     CLOSE = 'Close',
     WARNING = 'Warning'
+
+
+DBMS_JOB_SCHEDULER_ID = 999999
+
+# String Constants
+IP_ADDRESS_STRING = '{}/{}'
+TWO_PARAM_STRING = '{0}/{1}'
+SERVER_NOT_FOUND = gettext("Could not find the specified server.")
